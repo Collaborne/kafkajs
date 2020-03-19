@@ -312,56 +312,48 @@ module.exports = class Runner {
       return
     }
 
-    const enqueuedTasks = []
     let expectedNumberOfExecutions = 0
     let numberOfExecutions = 0
     const { lock, unlock, unlockWithError } = barrier()
 
     while (true) {
-      const result = iterator.next()
+      const result = await iterator.next()
       if (result.done) {
         break
       }
 
-      enqueuedTasks.push(async () => {
-        if (!this.running) {
-          return
-        }
+      const batches = result.value
+      expectedNumberOfExecutions += batches.length
 
-        const batches = await result.value
-        expectedNumberOfExecutions += batches.length
-
-        batches.map(batch =>
-          concurrently(async () => {
-            try {
-              if (!this.running) {
-                return
-              }
-
-              if (batch.isEmpty()) {
-                return
-              }
-
-              await onBatch(batch)
-              await this.consumerGroup.heartbeat({ interval: this.heartbeatInterval })
-            } catch (e) {
-              unlockWithError(e)
-            } finally {
-              numberOfExecutions++
-              if (numberOfExecutions === expectedNumberOfExecutions) {
-                unlock()
-              }
+      batches.forEach(batch =>
+        concurrently(async () => {
+          try {
+            if (!this.running) {
+              return
             }
-          }).catch(unlockWithError)
-        )
-      })
+
+            if (batch.isEmpty()) {
+              return
+            }
+
+            await onBatch(batch)
+            await this.consumerGroup.heartbeat({ interval: this.heartbeatInterval })
+          } catch (e) {
+            unlockWithError(e)
+          } finally {
+            numberOfExecutions++
+            if (numberOfExecutions === expectedNumberOfExecutions) {
+              unlock()
+            }
+          }
+        }).catch(unlockWithError)
+      )
     }
 
     if (!this.running) {
       return
     }
 
-    await Promise.all(enqueuedTasks.map(fn => fn()))
     if (expectedNumberOfExecutions > 0) {
       await lock
     }
