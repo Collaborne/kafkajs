@@ -246,7 +246,7 @@ module.exports = class BrokerPool {
     const connectedBrokerId = nodeIds.find(nodeId => this.brokers[nodeId].isConnected())
 
     if (connectedBrokerId) {
-      return await this.findBroker({ nodeId: connectedBrokerId })
+      return this.findBroker({ nodeId: connectedBrokerId })
     }
 
     // Cycle through the nodes until one connects

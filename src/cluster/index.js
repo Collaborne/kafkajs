@@ -338,7 +338,7 @@ module.exports = class Cluster {
    */
   async findGroupCoordinatorMetadata({ groupId, coordinatorType }) {
     const brokerMetadata = await this.brokerPool.withBroker(async ({ nodeId, broker }) => {
-      return await this.retrier(async (bail, retryCount, retryTime) => {
+      return this.retrier(async (bail, retryCount, retryTime) => {
         try {
           const brokerMetadata = await broker.findGroupCoordinator({ groupId, coordinatorType })
           this.logger.debug('Found group coordinator', {

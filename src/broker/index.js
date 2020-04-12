@@ -186,7 +186,7 @@ module.exports = class Broker {
    */
   async metadata(topics = []) {
     const metadata = this.lookupRequest(apiKeys.Metadata, requests.Metadata)
-    return await this.connection.send(
+    return this.connection.send(
       metadata({ topics, allowAutoTopicCreation: this.allowAutoTopicCreation })
     )
   }
@@ -249,7 +249,7 @@ module.exports = class Broker {
     compression = Compression.None,
   }) {
     const produce = this.lookupRequest(apiKeys.Produce, requests.Produce)
-    return await this.connection.send(
+    return this.connection.send(
       produce({
         acks,
         timeout,
@@ -297,7 +297,7 @@ module.exports = class Broker {
   }) {
     // TODO: validate topics not null/empty
     const fetch = this.lookupRequest(apiKeys.Fetch, requests.Fetch)
-    return await this.connection.send(
+    return this.connection.send(
       fetch({ replicaId, isolationLevel, maxWaitTime, minBytes, maxBytes, topics })
     )
   }
@@ -311,7 +311,7 @@ module.exports = class Broker {
    */
   async heartbeat({ groupId, groupGenerationId, memberId }) {
     const heartbeat = this.lookupRequest(apiKeys.Heartbeat, requests.Heartbeat)
-    return await this.connection.send(heartbeat({ groupId, groupGenerationId, memberId }))
+    return this.connection.send(heartbeat({ groupId, groupGenerationId, memberId }))
   }
 
   /**
@@ -323,7 +323,7 @@ module.exports = class Broker {
   async findGroupCoordinator({ groupId, coordinatorType }) {
     // TODO: validate groupId, mandatory
     const findCoordinator = this.lookupRequest(apiKeys.GroupCoordinator, requests.GroupCoordinator)
-    return await this.connection.send(findCoordinator({ groupId, coordinatorType }))
+    return this.connection.send(findCoordinator({ groupId, coordinatorType }))
   }
 
   /**
@@ -348,7 +348,7 @@ module.exports = class Broker {
     groupProtocols,
   }) {
     const joinGroup = this.lookupRequest(apiKeys.JoinGroup, requests.JoinGroup)
-    return await this.connection.send(
+    return this.connection.send(
       joinGroup({
         groupId,
         sessionTimeout,
@@ -368,7 +368,7 @@ module.exports = class Broker {
    */
   async leaveGroup({ groupId, memberId }) {
     const leaveGroup = this.lookupRequest(apiKeys.LeaveGroup, requests.LeaveGroup)
-    return await this.connection.send(leaveGroup({ groupId, memberId }))
+    return this.connection.send(leaveGroup({ groupId, memberId }))
   }
 
   /**
@@ -381,7 +381,7 @@ module.exports = class Broker {
    */
   async syncGroup({ groupId, generationId, memberId, groupAssignment }) {
     const syncGroup = this.lookupRequest(apiKeys.SyncGroup, requests.SyncGroup)
-    return await this.connection.send(
+    return this.connection.send(
       syncGroup({
         groupId,
         generationId,
@@ -443,7 +443,7 @@ module.exports = class Broker {
    */
   async offsetCommit({ groupId, groupGenerationId, memberId, retentionTime, topics }) {
     const offsetCommit = this.lookupRequest(apiKeys.OffsetCommit, requests.OffsetCommit)
-    return await this.connection.send(
+    return this.connection.send(
       offsetCommit({
         groupId,
         groupGenerationId,
@@ -470,7 +470,7 @@ module.exports = class Broker {
    */
   async offsetFetch({ groupId, topics }) {
     const offsetFetch = this.lookupRequest(apiKeys.OffsetFetch, requests.OffsetFetch)
-    return await this.connection.send(offsetFetch({ groupId, topics }))
+    return this.connection.send(offsetFetch({ groupId, topics }))
   }
 
   /**
@@ -480,7 +480,7 @@ module.exports = class Broker {
    */
   async describeGroups({ groupIds }) {
     const describeGroups = this.lookupRequest(apiKeys.DescribeGroups, requests.DescribeGroups)
-    return await this.connection.send(describeGroups({ groupIds }))
+    return this.connection.send(describeGroups({ groupIds }))
   }
 
   /**
@@ -501,7 +501,7 @@ module.exports = class Broker {
    */
   async createTopics({ topics, validateOnly = false, timeout = 5000 }) {
     const createTopics = this.lookupRequest(apiKeys.CreateTopics, requests.CreateTopics)
-    return await this.connection.send(createTopics({ topics, validateOnly, timeout }))
+    return this.connection.send(createTopics({ topics, validateOnly, timeout }))
   }
 
   /**
@@ -522,7 +522,7 @@ module.exports = class Broker {
    */
   async createPartitions({ topicPartitions, validateOnly = false, timeout = 5000 }) {
     const createPartitions = this.lookupRequest(apiKeys.CreatePartitions, requests.CreatePartitions)
-    return await this.connection.send(createPartitions({ topicPartitions, validateOnly, timeout }))
+    return this.connection.send(createPartitions({ topicPartitions, validateOnly, timeout }))
   }
 
   /**
@@ -535,7 +535,7 @@ module.exports = class Broker {
    */
   async deleteTopics({ topics, timeout = 5000 }) {
     const deleteTopics = this.lookupRequest(apiKeys.DeleteTopics, requests.DeleteTopics)
-    return await this.connection.send(deleteTopics({ topics, timeout }))
+    return this.connection.send(deleteTopics({ topics, timeout }))
   }
 
   /**
@@ -551,7 +551,7 @@ module.exports = class Broker {
    */
   async describeConfigs({ resources, includeSynonyms = false }) {
     const describeConfigs = this.lookupRequest(apiKeys.DescribeConfigs, requests.DescribeConfigs)
-    return await this.connection.send(describeConfigs({ resources, includeSynonyms }))
+    return this.connection.send(describeConfigs({ resources, includeSynonyms }))
   }
 
   /**
@@ -572,7 +572,7 @@ module.exports = class Broker {
    */
   async alterConfigs({ resources, validateOnly = false }) {
     const alterConfigs = this.lookupRequest(apiKeys.AlterConfigs, requests.AlterConfigs)
-    return await this.connection.send(alterConfigs({ resources, validateOnly }))
+    return this.connection.send(alterConfigs({ resources, validateOnly }))
   }
 
   /**
@@ -586,7 +586,7 @@ module.exports = class Broker {
    */
   async initProducerId({ transactionalId, transactionTimeout }) {
     const initProducerId = this.lookupRequest(apiKeys.InitProducerId, requests.InitProducerId)
-    return await this.connection.send(initProducerId({ transactionalId, transactionTimeout }))
+    return this.connection.send(initProducerId({ transactionalId, transactionTimeout }))
   }
 
   /**
@@ -611,7 +611,7 @@ module.exports = class Broker {
       apiKeys.AddPartitionsToTxn,
       requests.AddPartitionsToTxn
     )
-    return await this.connection.send(
+    return this.connection.send(
       addPartitionsToTxn({ transactionalId, producerId, producerEpoch, topics })
     )
   }
@@ -629,7 +629,7 @@ module.exports = class Broker {
    */
   async addOffsetsToTxn({ transactionalId, producerId, producerEpoch, groupId }) {
     const addOffsetsToTxn = this.lookupRequest(apiKeys.AddOffsetsToTxn, requests.AddOffsetsToTxn)
-    return await this.connection.send(
+    return this.connection.send(
       addOffsetsToTxn({ transactionalId, producerId, producerEpoch, groupId })
     )
   }
@@ -659,7 +659,7 @@ module.exports = class Broker {
    */
   async txnOffsetCommit({ transactionalId, groupId, producerId, producerEpoch, topics }) {
     const txnOffsetCommit = this.lookupRequest(apiKeys.TxnOffsetCommit, requests.TxnOffsetCommit)
-    return await this.connection.send(
+    return this.connection.send(
       txnOffsetCommit({ transactionalId, groupId, producerId, producerEpoch, topics })
     )
   }
@@ -677,7 +677,7 @@ module.exports = class Broker {
    */
   async endTxn({ transactionalId, producerId, producerEpoch, transactionResult }) {
     const endTxn = this.lookupRequest(apiKeys.EndTxn, requests.EndTxn)
-    return await this.connection.send(
+    return this.connection.send(
       endTxn({ transactionalId, producerId, producerEpoch, transactionResult })
     )
   }
@@ -689,7 +689,7 @@ module.exports = class Broker {
    */
   async listGroups() {
     const listGroups = this.lookupRequest(apiKeys.ListGroups, requests.ListGroups)
-    return await this.connection.send(listGroups())
+    return this.connection.send(listGroups())
   }
 
   /**
@@ -700,7 +700,7 @@ module.exports = class Broker {
    */
   async deleteGroups(groupIds) {
     const deleteGroups = this.lookupRequest(apiKeys.DeleteGroups, requests.DeleteGroups)
-    return await this.connection.send(deleteGroups(groupIds))
+    return this.connection.send(deleteGroups(groupIds))
   }
 
   /***

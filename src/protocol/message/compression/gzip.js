@@ -10,7 +10,7 @@ module.exports = {
    * @returns {Promise}
    */
   async compress(encoder) {
-    return await gzip(encoder.buffer)
+    return gzip(encoder.buffer)
   },
 
   /**
@@ -18,6 +18,6 @@ module.exports = {
    * @returns {Promise}
    */
   async decompress(buffer) {
-    return await unzip(buffer)
+    return unzip(buffer)
   },
 }
