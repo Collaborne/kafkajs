@@ -312,10 +312,12 @@ module.exports = class Runner {
       return
     }
 
-    const enqueuedTasks = []
-    let expectedNumberOfExecutions = 0
-    let numberOfExecutions = 0
     const { lock, unlock, unlockWithError } = barrier()
+
+    let requestsCompleted = false
+    let numberOfExecutions = 0
+    let expectedNumberOfExecutions = 0
+    const enqueuedTasks = []
 
     while (true) {
       const result = iterator.next()
@@ -348,7 +350,7 @@ module.exports = class Runner {
               unlockWithError(e)
             } finally {
               numberOfExecutions++
-              if (numberOfExecutions === expectedNumberOfExecutions) {
+              if (requestsCompleted && numberOfExecutions === expectedNumberOfExecutions) {
                 unlock()
               }
             }
@@ -362,9 +364,17 @@ module.exports = class Runner {
     }
 
     await Promise.all(enqueuedTasks.map(fn => fn()))
-    if (expectedNumberOfExecutions > 0) {
-      await lock
+    requestsCompleted = true
+
+    if (expectedNumberOfExecutions === numberOfExecutions) {
+      unlock()
     }
+
+    const error = await lock
+    if (error) {
+      throw error
+    }
+
     await this.autoCommitOffsets()
     await this.consumerGroup.heartbeat({ interval: this.heartbeatInterval })
   }
