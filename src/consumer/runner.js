@@ -321,9 +321,11 @@ module.exports = class Runner extends EventEmitter {
       return
     }
 
-    let expectedNumberOfExecutions = 0
-    let numberOfExecutions = 0
     const { lock, unlock, unlockWithError } = barrier()
+
+    let requestsCompleted = false
+    let numberOfExecutions = 0
+    let expectedNumberOfExecutions = 0
 
     while (true) {
       const result = await iterator.next()
@@ -351,7 +353,7 @@ module.exports = class Runner extends EventEmitter {
             unlockWithError(e)
           } finally {
             numberOfExecutions++
-            if (numberOfExecutions === expectedNumberOfExecutions) {
+            if (requestsCompleted && numberOfExecutions === expectedNumberOfExecutions) {
               unlock()
             }
           }
@@ -363,8 +365,10 @@ module.exports = class Runner extends EventEmitter {
       return
     }
 
-    if (expectedNumberOfExecutions > 0) {
-      await lock
+    requestsCompleted = true
+
+    if (expectedNumberOfExecutions === numberOfExecutions) {
+      unlock()
     }
 
     const error = await lock
