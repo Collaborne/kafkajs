@@ -1,4 +1,4 @@
-const EventEmitter = require('events')
+const { EventEmitter } = require('events')
 
 const createPromiseNotifier = (emitter, results, handleError) => async (promise, i) => {
   try {

@@ -1,4 +1,4 @@
-const EventEmitter = require('events')
+const { EventEmitter } = require('events')
 const Long = require('long')
 const createRetry = require('../retry')
 const limitConcurrency = require('../utils/concurrency')
