@@ -326,45 +326,53 @@ module.exports = class Runner extends EventEmitter {
     let requestsCompleted = false
     let numberOfExecutions = 0
     let expectedNumberOfExecutions = 0
+    const enqueuedTasks = []
 
     while (true) {
-      const result = await iterator.next()
+      const result = iterator.next()
       if (result.done) {
         break
       }
 
-      const batches = result.value
-      expectedNumberOfExecutions += batches.length
+      enqueuedTasks.push(async () => {
+        if (!this.running) {
+          return
+        }
 
-      batches.forEach(batch =>
-        concurrently(async () => {
-          try {
-            if (!this.running) {
-              return
-            }
+        const batches = await result.value
+        expectedNumberOfExecutions += batches.length
 
-            if (batch.isEmpty()) {
-              return
-            }
+        batches.map(batch =>
+          concurrently(async () => {
+            try {
+              if (!this.running) {
+                return
+              }
 
-            await onBatch(batch)
-            await this.consumerGroup.heartbeat({ interval: this.heartbeatInterval })
-          } catch (e) {
-            unlockWithError(e)
-          } finally {
-            numberOfExecutions++
-            if (requestsCompleted && numberOfExecutions === expectedNumberOfExecutions) {
-              unlock()
+              if (batch.isEmpty()) {
+                return
+              }
+
+              await onBatch(batch)
+              await this.consumerGroup.heartbeat({ interval: this.heartbeatInterval })
+            } catch (e) {
+              unlockWithError(e)
+            } finally {
+              numberOfExecutions++
+              if (requestsCompleted && numberOfExecutions === expectedNumberOfExecutions) {
+                unlock()
+              }
             }
-          }
-        }).catch(unlockWithError)
-      )
+          }).catch(unlockWithError)
+        )
+      })
     }
 
     if (!this.running) {
       return
     }
 
+    await Promise.all(enqueuedTasks.map(fn => fn()))
     requestsCompleted = true
 
     if (expectedNumberOfExecutions === numberOfExecutions) {

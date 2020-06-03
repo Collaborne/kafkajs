@@ -1,7 +1,16 @@
+const defaultErrorHandler = e => {
+  throw e
+}
+
 /**
  * Generator that processes the given promises, and yields their result in the order of them resolving.
+ *
+ * @template T
+ * @param {Promise<T>[]} promises promises to process
+ * @param {(err: Error) => any} [handleError] optional error handler
+ * @returns {Generator<Promise<T>>}
  */
-async function* BufferedAsyncIterator(promises) {
+function* BufferedAsyncIterator(promises, handleError = defaultErrorHandler) {
   /** Queue of promises in order of resolution */
   const promisesQueue = []
   /** Queue of {resolve, reject} in the same order as `promisesQueue` */
@@ -27,18 +36,23 @@ async function* BufferedAsyncIterator(promises) {
         const { resolve } = resolveRejectQueue.pop()
         resolve(result)
       },
-      err => {
+      async err => {
         const { reject } = resolveRejectQueue.pop()
-        reject(err)
+        try {
+          await handleError(err)
+          reject(err)
+        } catch (newError) {
+          reject(newError)
+        }
       }
     )
   })
 
-  // While there are promises left pick the next one, wait for it, and yield the result
+  // While there are promises left pick the next one to yield
+  // The caller will then wait for the value to resolve.
   while (promisesQueue.length > 0) {
     const nextPromise = promisesQueue.pop()
-    const result = await nextPromise
-    yield result
+    yield nextPromise
   }
 }
 
