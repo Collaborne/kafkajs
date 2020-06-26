@@ -398,7 +398,7 @@ export type Broker = {
   metadata(
     topics: string[]
   ): Promise<{
-    brokers: Array<{ nodeId: number; host: string; port: number }>
+    brokers: Array<{ nodeId: number; host: string; port: number, rack?: string }>
     topicMetadata: Array<{
       topicErrorCode: number
       topic: number

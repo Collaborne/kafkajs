@@ -320,6 +320,7 @@ describe('Broker > Fetch', () => {
                 lastStableOffset: '3',
                 lastStartOffset: '0',
                 partition: 0,
+                preferredReadReplica: expect.optional(-1),
                 messages: [
                   {
                     magicByte: 2,
@@ -403,6 +404,7 @@ describe('Broker > Fetch', () => {
                 lastStableOffset: '3',
                 lastStartOffset: '0',
                 partition: 0,
+                preferredReadReplica: expect.optional(-1),
                 messages: [
                   {
                     magicByte: 2,
@@ -486,6 +488,7 @@ describe('Broker > Fetch', () => {
                 lastStableOffset: '3',
                 lastStartOffset: '0',
                 partition: 0,
+                preferredReadReplica: expect.optional(-1),
                 messages: [
                   {
                     magicByte: 2,
@@ -602,6 +605,7 @@ describe('Broker > Fetch', () => {
                   errorCode: 0,
                   highWatermark: '3',
                   partition: 0,
+                  preferredReadReplica: expect.optional(-1),
                   messages: [],
                 },
               ],
@@ -639,6 +643,7 @@ describe('Broker > Fetch', () => {
                     lastStableOffset: '4',
                     lastStartOffset: '0',
                     partition: 0,
+                    preferredReadReplica: expect.optional(-1),
                     messages: [
                       {
                         magicByte: 2,
@@ -767,6 +772,7 @@ describe('Broker > Fetch', () => {
                   lastStableOffset: '0',
                   lastStartOffset: '0',
                   partition: 0,
+                  preferredReadReplica: expect.optional(-1),
                   messages: [
                     {
                       magicByte: 2,
@@ -855,6 +861,7 @@ describe('Broker > Fetch', () => {
                     lastStableOffset: '4',
                     lastStartOffset: '0',
                     partition: 0,
+                    preferredReadReplica: expect.optional(-1),
                     messages: [
                       // Control record
                       {
