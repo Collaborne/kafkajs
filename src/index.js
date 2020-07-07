@@ -120,6 +120,7 @@ module.exports = class Client {
     allowAutoTopicCreation,
     maxInFlightRequests,
     readUncommitted = false,
+    rackId = '',
   } = {}) {
     const isolationLevel = readUncommitted
       ? ISOLATION_LEVEL.READ_UNCOMMITTED
@@ -149,6 +150,7 @@ module.exports = class Client {
       maxWaitTimeInMs,
       isolationLevel,
       instrumentationEmitter,
+      rackId,
     })
   }
 
