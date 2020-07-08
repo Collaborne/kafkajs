@@ -441,7 +441,10 @@ module.exports = class ConsumerGroup {
 
         const batchesPerPartition = responses.map(({ topicName, partitions }) => {
           const topicRequestData = requestsPerNode[nodeId].find(({ topic }) => topic === topicName)
-          const preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[topicName] || {}
+          let preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[topicName]
+          if (!preferredReadReplicas) {
+            this.preferredReadReplicasPerTopicPartition[topicName] = preferredReadReplicas = {}
+          }
 
           return partitions
             .filter(
