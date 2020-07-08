@@ -436,8 +436,6 @@ module.exports = class ConsumerGroup {
         const batchesPerPartition = responses.map(({ topicName, partitions }) => {
           const topicRequestData = requestsPerNode[nodeId].find(({ topic }) => topic === topicName)
 
-          // XXX: Is this reset needed? Can we do it lazily?
-          this.preferredReadReplicasPerTopicPartition[topicName] = []
           return partitions
             .filter(
               partitionData =>
@@ -536,19 +534,24 @@ module.exports = class ConsumerGroup {
     throw e
   }
 
-  // TODO: handle preferred replica case
   async recoverFromOffsetOutOfRange(e) {
-    this.logger.error('Offset out of range, resetting to default offset', {
-      topic: e.topic,
-      partition: e.partition,
-      groupId: this.groupId,
-      memberId: this.memberId,
-    })
+    // If we are fetching from a follower try with the leader before resetting offsets
+    const preferredReadReplica = (this.preferredReadReplicasPerTopicPartition[e.topic] || [])[e.partition]
+    if (typeof preferredReadReplica === 'number') {
+      delete this.preferredReadReplicasPerTopicPartition[e.topic][partition]
+    } else {
+      this.logger.error('Offset out of range, resetting to default offset', {
+        topic: e.topic,
+        partition: e.partition,
+        groupId: this.groupId,
+        memberId: this.memberId,
+      })
 
-    await this.offsetManager.setDefaultOffset({
-      topic: e.topic,
-      partition: e.partition,
-    })
+      await this.offsetManager.setDefaultOffset({
+        topic: e.topic,
+        partition: e.partition,
+      })
+    }
   }
 
   generatePartitionsPerSubscribedTopic() {
