@@ -151,6 +151,7 @@ module.exports = class Client {
       isolationLevel,
       instrumentationEmitter,
       rackId,
+      metadataMaxAge,
     })
   }
 
