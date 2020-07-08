@@ -536,7 +536,9 @@ module.exports = class ConsumerGroup {
 
   async recoverFromOffsetOutOfRange(e) {
     // If we are fetching from a follower try with the leader before resetting offsets
-    const preferredReadReplica = (this.preferredReadReplicasPerTopicPartition[e.topic] || [])[e.partition]
+    const preferredReadReplica = (this.preferredReadReplicasPerTopicPartition[e.topic] || [])[
+      e.partition
+    ]
     if (typeof preferredReadReplica === 'number') {
       delete this.preferredReadReplicasPerTopicPartition[e.topic][partition]
     } else {
@@ -630,7 +632,7 @@ module.exports = class ConsumerGroup {
         preferredReplica = metadata.leader
       }
       const current = result[preferredReplica] || []
-      return { ...result, [metadata.leader]: [...current, partitionId] }
+      return { ...result, [preferredReplica]: [...current, partitionId] }
     }, {})
   }
 }
