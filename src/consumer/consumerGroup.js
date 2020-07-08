@@ -547,9 +547,8 @@ module.exports = class ConsumerGroup {
 
   async recoverFromOffsetOutOfRange(e) {
     // If we are fetching from a follower try with the leader before resetting offsets
-    const preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[e.topic] || {}
-    const preferredReadReplica = preferredReadReplicas[e.partition]
-    if (typeof preferredReadReplica === 'number') {
+    const preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[e.topic]
+    if (preferredReadReplicas && typeof preferredReadReplicas[e.partition] === 'number') {
       this.logger.debug('Offset out of range while fetching from follower, retrying with leader', {
         topic: e.topic,
         partition: e.partition,
@@ -621,7 +620,7 @@ module.exports = class ConsumerGroup {
   // Invariant: The resulting object has each partition referenced exactly once
   findReadReplicaForPartitions(topic, partitions) {
     const partitionMetadata = this.cluster.findTopicPartitionMetadata(topic)
-    const preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[topic] || {}
+    const preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[topic]
     return partitions.reduce((result, id) => {
       const partitionId = parseInt(id, 10)
       const metadata = partitionMetadata.find(p => p.partitionId === partitionId)
@@ -634,23 +633,11 @@ module.exports = class ConsumerGroup {
       }
 
       // Pick the preferred replica if there is one, and it isn't known to be offline, otherwise the leader.
-      let { nodeId, expireAt } = preferredReadReplicas[partitionId] || {}
-      if (Date.now() > expireAt) {
-        this.logger.debug('Preferred read replica information has expired, using leader', {
-          topic,
-          partitionId,
-          groupId: this.groupId,
-          memberId: this.memberId,
-          preferredReplica: nodeId,
-          leader: metadata.leader,
-        })
-        delete preferredReadReplicas[partitionId]
-        nodeId = null
-      }
-      if (nodeId !== null && nodeId !== undefined) {
-        const offlineReplicas = metadata.offlineReplicas
-        if (Array.isArray(offlineReplicas) && offlineReplicas.includes(nodeId)) {
-          this.logger.debug('Preferred read replica is offline, using leader', {
+      let nodeId = metadata.leader
+      if (preferredReadReplicas) {
+        const { nodeId: preferredReadReplica, expireAt } = preferredReadReplicas[partitionId] || {}
+        if (Date.now() > expireAt) {
+          this.logger.debug('Preferred read replica information has expired, using leader', {
             topic,
             partitionId,
             groupId: this.groupId,
@@ -658,10 +645,24 @@ module.exports = class ConsumerGroup {
             preferredReplica: nodeId,
             leader: metadata.leader,
           })
-          nodeId = metadata.leader
+          // Drop the entry
+          delete preferredReadReplicas[partitionId]
+        } else {
+          // Valid entry, check whether it is not offline
+          const offlineReplicas = metadata.offlineReplicas
+          if (Array.isArray(offlineReplicas) && offlineReplicas.includes(nodeId)) {
+            this.logger.debug('Preferred read replica is offline, using leader', {
+              topic,
+              partitionId,
+              groupId: this.groupId,
+              memberId: this.memberId,
+              preferredReplica: nodeId,
+              leader: metadata.leader,
+            })
+          } else {
+            nodeId = preferredReadReplica
+          }
         }
-      } else {
-        nodeId = metadata.leader
       }
       const current = result[nodeId] || []
       return { ...result, [nodeId]: [...current, partitionId] }
