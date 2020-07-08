@@ -638,12 +638,12 @@ module.exports = class ConsumerGroup {
             partitionId,
             groupId: this.groupId,
             memberId: this.memberId,
-            preferredReplica: nodeId,
+            preferredReadReplica,
             leader: metadata.leader,
           })
           // Drop the entry
           delete preferredReadReplicas[partitionId]
-        } else {
+        } else if (preferredReadReplica != null) {
           // Valid entry, check whether it is not offline
           const offlineReplicas = metadata.offlineReplicas
           if (Array.isArray(offlineReplicas) && offlineReplicas.includes(nodeId)) {
@@ -652,7 +652,7 @@ module.exports = class ConsumerGroup {
               partitionId,
               groupId: this.groupId,
               memberId: this.memberId,
-              preferredReplica: nodeId,
+              preferredReadReplica,
               leader: metadata.leader,
             })
           } else {
