@@ -458,7 +458,7 @@ module.exports = class ConsumerGroup {
                 const { nodeId: currentPreferredReadReplica } =
                   preferredReadReplicas[partition] || {}
                 if (currentPreferredReadReplica !== preferredReadReplica) {
-                  this.logger.debug(
+                  this.logger.info(
                     `Preferred read replica for ${topicName} partition ${partition} is now ${preferredReadReplica}`,
                     {
                       groupId: this.groupId,
@@ -556,7 +556,7 @@ module.exports = class ConsumerGroup {
     // If we are fetching from a follower try with the leader before resetting offsets
     const preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[e.topic]
     if (preferredReadReplicas && typeof preferredReadReplicas[e.partition] === 'number') {
-      this.logger.debug('Offset out of range while fetching from follower, retrying with leader', {
+      this.logger.info('Offset out of range while fetching from follower, retrying with leader', {
         topic: e.topic,
         partition: e.partition,
         groupId: this.groupId,
@@ -644,7 +644,7 @@ module.exports = class ConsumerGroup {
       if (preferredReadReplicas) {
         const { nodeId: preferredReadReplica, expireAt } = preferredReadReplicas[partitionId] || {}
         if (Date.now() > expireAt) {
-          this.logger.debug('Preferred read replica information has expired, using leader', {
+          this.logger.info('Preferred read replica information has expired, using leader', {
             topic,
             partitionId,
             groupId: this.groupId,
@@ -656,9 +656,10 @@ module.exports = class ConsumerGroup {
           delete preferredReadReplicas[partitionId]
         } else if (preferredReadReplica != null) {
           // Valid entry, check whether it is not offline
+          // Note that we don't delete the preference here, and rather hope that eventually that replica comes online again
           const offlineReplicas = metadata.offlineReplicas
           if (Array.isArray(offlineReplicas) && offlineReplicas.includes(nodeId)) {
-            this.logger.debug('Preferred read replica is offline, using leader', {
+            this.logger.info('Preferred read replica is offline, using leader', {
               topic,
               partitionId,
               groupId: this.groupId,
