@@ -455,6 +455,17 @@ module.exports = class ConsumerGroup {
             .map(partitionData => {
               const { partition, preferredReadReplica } = partitionData
               if (preferredReadReplica != null && preferredReadReplica !== -1) {
+                const { nodeId: currentPreferredReadReplica } =
+                  preferredReadReplicas[partition] || {}
+                if (currentPreferredReadReplica !== preferredReadReplica) {
+                  this.logger.debug(
+                    `Preferred read replica for ${topicName} partition ${partition} is now ${preferredReadReplica}`,
+                    {
+                      groupId: this.groupId,
+                      memberId: this.memberId,
+                    }
+                  )
+                }
                 preferredReadReplicas[partition] = {
                   nodeId: preferredReadReplica,
                   expireAt: Date.now() + this.metadataMaxAge,
