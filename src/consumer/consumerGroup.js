@@ -459,10 +459,12 @@ module.exports = class ConsumerGroup {
                   preferredReadReplicas[partition] || {}
                 if (currentPreferredReadReplica !== preferredReadReplica) {
                   this.logger.info(
-                    `Preferred read replica for ${topicName} partition ${partition} is now ${preferredReadReplica}`,
+                    `Preferred read replica is now ${preferredReadReplica}`,
                     {
                       groupId: this.groupId,
                       memberId: this.memberId,
+                      topic: topicName,
+                      partition,
                     }
                   )
                 }
