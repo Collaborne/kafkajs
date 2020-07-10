@@ -39,6 +39,7 @@ module.exports = ({
   isolationLevel = ISOLATION_LEVEL.READ_COMMITTED,
   rackId = '',
   instrumentationEmitter: rootInstrumentationEmitter,
+  metadataMaxAge,
 }) => {
   if (!groupId) {
     throw new KafkaJSNonRetriableError('Consumer groupId must be a non-empty string.')
@@ -79,6 +80,7 @@ module.exports = ({
       autoCommitThreshold,
       isolationLevel,
       rackId,
+      metadataMaxAge,
     })
   }
 

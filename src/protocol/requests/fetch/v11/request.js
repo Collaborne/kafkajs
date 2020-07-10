@@ -70,7 +70,7 @@ const encodeTopic = ({ topic, partitions }) => {
 
 const encodePartition = ({
   partition,
-  currentLeaderEpoch,
+  currentLeaderEpoch = -1,
   fetchOffset,
   logStartOffset = -1,
   maxBytes,

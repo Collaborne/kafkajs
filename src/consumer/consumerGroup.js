@@ -49,6 +49,7 @@ module.exports = class ConsumerGroup {
     autoCommitThreshold,
     isolationLevel,
     rackId,
+    metadataMaxAge,
   }) {
     /** @type {import("../../types").Cluster} */
     this.cluster = cluster
@@ -69,6 +70,7 @@ module.exports = class ConsumerGroup {
     this.autoCommitThreshold = autoCommitThreshold
     this.isolationLevel = isolationLevel
     this.rackId = rackId
+    this.metadataMaxAge = metadataMaxAge
 
     this.seekOffset = new SeekOffsets()
     this.coordinator = null
@@ -81,7 +83,11 @@ module.exports = class ConsumerGroup {
     this.partitionsPerSubscribedTopic = null
     /**
      * Preferred read replica per topic and partition
-     * @type {{[topicName: string]: number[]}}
+     *
+     * Each of the partitions tracks the preferred read replica (`nodeId`) and a timestamp
+     * until when that preference is valid.
+     *
+     * @type {{[topicName: string]: {[partition: number]: {nodeId: number, expireAt: number}}}
      */
     this.preferredReadReplicasPerTopicPartition = {}
     this.offsetManager = null
@@ -435,6 +441,10 @@ module.exports = class ConsumerGroup {
 
         const batchesPerPartition = responses.map(({ topicName, partitions }) => {
           const topicRequestData = requestsPerNode[nodeId].find(({ topic }) => topic === topicName)
+          let preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[topicName]
+          if (!preferredReadReplicas) {
+            this.preferredReadReplicasPerTopicPartition[topicName] = preferredReadReplicas = {}
+          }
 
           // XXX: Is this reset needed? Can we do it lazily?
           this.preferredReadReplicasPerTopicPartition[topicName] = []
@@ -446,14 +456,22 @@ module.exports = class ConsumerGroup {
             )
             .map(partitionData => {
               const { partition, preferredReadReplica } = partitionData
-              if (
-                preferredReadReplica !== null &&
-                preferredReadReplica !== undefined &&
-                preferredReadReplica !== -1
-              ) {
-                this.preferredReadReplicasPerTopicPartition[topicName][
-                  partition
-                ] = preferredReadReplica
+              if (preferredReadReplica != null && preferredReadReplica !== -1) {
+                const { nodeId: currentPreferredReadReplica } =
+                  preferredReadReplicas[partition] || {}
+                if (currentPreferredReadReplica !== preferredReadReplica) {
+                  this.logger.info(
+                    `Preferred read replica for ${topicName} partition ${partition} is now ${preferredReadReplica}`,
+                    {
+                      groupId: this.groupId,
+                      memberId: this.memberId,
+                    }
+                  )
+                }
+                preferredReadReplicas[partition] = {
+                  nodeId: preferredReadReplica,
+                  expireAt: Date.now() + this.metadataMaxAge,
+                }
               }
 
               const partitionRequestData = topicRequestData.partitions.find(
@@ -538,17 +556,29 @@ module.exports = class ConsumerGroup {
 
   // TODO: handle preferred replica case
   async recoverFromOffsetOutOfRange(e) {
-    this.logger.error('Offset out of range, resetting to default offset', {
-      topic: e.topic,
-      partition: e.partition,
-      groupId: this.groupId,
-      memberId: this.memberId,
-    })
+    // If we are fetching from a follower try with the leader before resetting offsets
+    const preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[e.topic]
+    if (preferredReadReplicas && typeof preferredReadReplicas[e.partition] === 'number') {
+      this.logger.info('Offset out of range while fetching from follower, retrying with leader', {
+        topic: e.topic,
+        partition: e.partition,
+        groupId: this.groupId,
+        memberId: this.memberId,
+      })
+      delete preferredReadReplicas[e.partition]
+    } else {
+      this.logger.error('Offset out of range, resetting to default offset', {
+        topic: e.topic,
+        partition: e.partition,
+        groupId: this.groupId,
+        memberId: this.memberId,
+      })
 
-    await this.offsetManager.setDefaultOffset({
-      topic: e.topic,
-      partition: e.partition,
-    })
+      await this.offsetManager.setDefaultOffset({
+        topic: e.topic,
+        partition: e.partition,
+      })
+    }
   }
 
   generatePartitionsPerSubscribedTopic() {
@@ -600,7 +630,7 @@ module.exports = class ConsumerGroup {
   // Invariant: The resulting object has each partition referenced exactly once
   findReadReplicaForPartitions(topic, partitions) {
     const partitionMetadata = this.cluster.findTopicPartitionMetadata(topic)
-    const preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[topic] || []
+    const preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[topic]
     return partitions.reduce((result, id) => {
       const partitionId = parseInt(id, 10)
       const metadata = partitionMetadata.find(p => p.partitionId === partitionId)
@@ -613,21 +643,40 @@ module.exports = class ConsumerGroup {
       }
 
       // Pick the preferred replica if there is one, and it isn't known to be offline, otherwise the leader.
-      let preferredReplica = preferredReadReplicas[partitionId]
-      if (preferredReplica !== null && preferredReplica !== undefined) {
-        const offlineReplicas = metadata.offlineReplicas
-        if (Array.isArray(offlineReplicas) && offlineReplicas.includes(preferredReplica)) {
-          this.logger.debug('Preferred read replica is offline, using leader', {
-            preferredReplica,
+      let nodeId = metadata.leader
+      if (preferredReadReplicas) {
+        const { nodeId: preferredReadReplica, expireAt } = preferredReadReplicas[partitionId] || {}
+        if (Date.now() > expireAt) {
+          this.logger.info('Preferred read replica information has expired, using leader', {
+            topic,
+            partitionId,
+            groupId: this.groupId,
+            memberId: this.memberId,
+            preferredReadReplica,
             leader: metadata.leader,
           })
-          preferredReplica = metadata.leader
+          // Drop the entry
+          delete preferredReadReplicas[partitionId]
+        } else if (preferredReadReplica != null) {
+          // Valid entry, check whether it is not offline
+          // Note that we don't delete the preference here, and rather hope that eventually that replica comes online again
+          const offlineReplicas = metadata.offlineReplicas
+          if (Array.isArray(offlineReplicas) && offlineReplicas.includes(nodeId)) {
+            this.logger.info('Preferred read replica is offline, using leader', {
+              topic,
+              partitionId,
+              groupId: this.groupId,
+              memberId: this.memberId,
+              preferredReadReplica,
+              leader: metadata.leader,
+            })
+          } else {
+            nodeId = preferredReadReplica
+          }
         }
-      } else {
-        preferredReplica = metadata.leader
       }
-      const current = result[preferredReplica] || []
-      return { ...result, [metadata.leader]: [...current, partitionId] }
+      const current = result[nodeId] || []
+      return { ...result, [nodeId]: [...current, partitionId] }
     }, {})
   }
 }

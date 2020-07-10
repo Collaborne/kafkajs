@@ -104,6 +104,7 @@ export interface ConsumerConfig {
   allowAutoTopicCreation?: boolean
   maxInFlightRequests?: number
   readUncommitted?: boolean
+  rackId?: string
 }
 
 export type PartitionAssigner = (config: { cluster: Cluster }) => Assigner
