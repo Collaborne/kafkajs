@@ -446,8 +446,6 @@ module.exports = class ConsumerGroup {
             this.preferredReadReplicasPerTopicPartition[topicName] = preferredReadReplicas = {}
           }
 
-          // XXX: Is this reset needed? Can we do it lazily?
-          this.preferredReadReplicasPerTopicPartition[topicName] = []
           return partitions
             .filter(
               partitionData =>
