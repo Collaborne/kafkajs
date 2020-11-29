@@ -1,6 +1,10 @@
 const Connection = require('../network/connection')
 const { KafkaJSConnectionError, KafkaJSNonRetriableError } = require('../errors')
 
+/**
+ * @param {Object} options
+ * @param {import("../instrumentation/emitter")} [options.instrumentationEmitter]
+ */
 module.exports = ({
   socketFactory,
   brokers,
@@ -77,6 +81,12 @@ module.exports = ({
         retry,
         logger,
       })
+    },
+
+    forwardInstrumentationEvents: anotherInstrumentationEmitter => {
+      if (instrumentationEmitter) {
+        instrumentationEmitter.forward(anotherInstrumentationEmitter)
+      }
     },
   }
 }

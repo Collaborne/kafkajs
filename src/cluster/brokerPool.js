@@ -145,16 +145,31 @@ module.exports = class BrokerPool {
 
   /**
    * @public
-   * @param {Array<String>} topics
+   * @param {Array<String>} topics topics that minimally should be known in the metadata afterwards
    * @returns {Promise<null>}
    */
   async refreshMetadata(topics) {
+    const getTargetTopics = topicMetadata => {
+      if (!topicMetadata) {
+        return topics
+      }
+      const targetTopics = topicMetadata.map(({ topic }) => topic)
+      return topics.reduce(
+        (result, topic) => (result.includes(topic) ? result : result.concat(topic)),
+        targetTopics
+      )
+    }
+
     const broker = await this.findConnectedBroker()
     const { host: seedHost, port: seedPort } = this.seedBroker.connection
 
     return this.retrier(async (bail, retryCount, retryTime) => {
       try {
-        this.metadata = await broker.metadata(topics)
+        // Refresh the metadata for all topics: The pool could be shared between different clusters,
+        // each with their own target topics
+        // In theory we could also try to just fetch the data for the given topics, and then combine the
+        // existing metadata.
+        this.metadata = await broker.metadata(getTargetTopics(this.metadata?.topicMetadata))
         this.metadataExpireAt = Date.now() + this.metadataMaxAge
 
         const replacedBrokers = []
@@ -338,5 +353,9 @@ module.exports = class BrokerPool {
         bail(e)
       }
     })
+  }
+
+  forwardInstrumentationEvents(anotherInstrumentationEmitter) {
+    this.connectionBuilder.forwardInstrumentationEvents(anotherInstrumentationEmitter)
   }
 }
