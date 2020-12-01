@@ -13,6 +13,19 @@ const PRIVATE = {
   COMMITTED_OFFSETS: Symbol('private:OffsetManager:committedOffsets'),
 }
 module.exports = class OffsetManager {
+  /**
+   * @param {Object} options
+   * @param {import("../../../types").Cluster} options.cluster
+   * @param {import("../../../types").Broker} options.coordinator
+   * @param {import("../../../types").IMemberAssignment} options.memberAssignment
+   * @param {number | null} options.autoCommitInterval
+   * @param {number | null} options.autoCommitThreshold
+   * @param {{[topic: string]: { fromBeginning: boolean }}} options.topicConfigurations
+   * @param {import("../../instrumentation/emitter")} options.instrumentationEmitter
+   * @param {string} options.groupId
+   * @param {number} options.generationId
+   * @param {string} options.memberId
+   */
   constructor({
     cluster,
     coordinator,

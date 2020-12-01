@@ -1,7 +1,5 @@
-const BrokerPool = require('./brokerPool')
 const Lock = require('../utils/lock')
 const createRetry = require('../retry')
-const connectionBuilder = require('./connectionBuilder')
 const flatten = require('../utils/flatten')
 const { EARLIEST_OFFSET, LATEST_OFFSET } = require('../constants')
 const {
@@ -13,7 +11,7 @@ const {
 } = require('../errors')
 const COORDINATOR_TYPES = require('../protocol/coordinatorTypes')
 
-const { keys } = Object
+const { entries } = Object
 
 const mergeTopics = (obj, { topic, partitions }) => ({
   ...obj,
@@ -23,61 +21,23 @@ const mergeTopics = (obj, { topic, partitions }) => ({
 module.exports = class Cluster {
   /**
    * @param {Object} options
-   * @param {Array<string>} options.brokers example: ['127.0.0.1:9092', '127.0.0.1:9094']
-   * @param {Object} options.ssl
-   * @param {Object} options.sasl
-   * @param {string} options.clientId
-   * @param {number} options.connectionTimeout - in milliseconds
-   * @param {number} options.authenticationTimeout - in milliseconds
-   * @param {number} options.reauthenticationThreshold - in milliseconds
-   * @param {number} [options.requestTimeout=30000] - in milliseconds
-   * @param {number} options.metadataMaxAge - in milliseconds
-   * @param {boolean} options.allowAutoTopicCreation
-   * @param {number} options.maxInFlightRequests
    * @param {number} options.isolationLevel
    * @param {Object} options.retry
    * @param {import("../../types").Logger} options.logger
    * @param {Map} options.offsets
-   * @param {import("../instrumentation/emitter")} [options.instrumentationEmitter=null]
+   * @param {import("./brokerPool")} options.brokerPool
    */
   constructor({
     logger: rootLogger,
-    socketFactory,
-    brokers,
-    ssl,
-    sasl,
-    clientId,
-    connectionTimeout,
-    authenticationTimeout,
-    reauthenticationThreshold,
     requestTimeout = 30000,
-    enforceRequestTimeout,
-    metadataMaxAge,
     retry,
-    allowAutoTopicCreation,
-    maxInFlightRequests,
     isolationLevel,
-    instrumentationEmitter = null,
     offsets = new Map(),
+    brokerPool,
   }) {
     this.rootLogger = rootLogger
     this.logger = rootLogger.namespace('Cluster')
-    this.retry = { ...retry }
-    this.retrier = createRetry(this.retry)
-    this.connectionBuilder = connectionBuilder({
-      logger: rootLogger,
-      instrumentationEmitter,
-      socketFactory,
-      brokers,
-      ssl,
-      sasl,
-      clientId,
-      connectionTimeout,
-      requestTimeout,
-      enforceRequestTimeout,
-      maxInFlightRequests,
-      retry,
-    })
+    this.retrier = createRetry(retry)
 
     this.targetTopics = new Set()
     this.mutatingTargetTopics = new Lock({
@@ -85,15 +45,7 @@ module.exports = class Cluster {
       timeout: requestTimeout,
     })
     this.isolationLevel = isolationLevel
-    this.brokerPool = new BrokerPool({
-      connectionBuilder: this.connectionBuilder,
-      logger: this.rootLogger,
-      retry,
-      allowAutoTopicCreation,
-      authenticationTimeout,
-      reauthenticationThreshold,
-      metadataMaxAge,
-    })
+    this.brokerPool = brokerPool
     this.committedOffsetsByGroup = offsets
   }
 
@@ -434,24 +386,23 @@ module.exports = class Cluster {
 
       topicConfigurations[topic] = { timestamp }
 
-      keys(partitionsPerLeader).map(nodeId => {
+      entries(partitionsPerLeader).map(([nodeId, leaderPartitions]) => {
         partitionsPerBroker[nodeId] = partitionsPerBroker[nodeId] || {}
         partitionsPerBroker[nodeId][topic] = partitions.filter(p =>
-          partitionsPerLeader[nodeId].includes(p.partition)
+          leaderPartitions.includes(p.partition)
         )
       })
     }
 
     // Create a list of requests to fetch the offset of all partitions
-    const requests = keys(partitionsPerBroker).map(async nodeId => {
+    const requests = entries(partitionsPerBroker).map(async ([nodeId, partitions]) => {
       const broker = await this.findBroker({ nodeId })
-      const partitions = partitionsPerBroker[nodeId]
 
       const { responses: topicOffsets } = await broker.listOffsets({
         isolationLevel: this.isolationLevel,
-        topics: keys(partitions).map(topic => ({
+        topics: entries(partitions).map(([topic, topicPartitions]) => ({
           topic,
-          partitions: partitions[topic].map(addDefaultOffset(topic)),
+          partitions: topicPartitions.map(addDefaultOffset(topic)),
         })),
       })
 
@@ -462,9 +413,9 @@ module.exports = class Cluster {
     const responses = await Promise.all(requests)
     const partitionsPerTopic = flatten(responses).reduce(mergeTopics, {})
 
-    return keys(partitionsPerTopic).map(topic => ({
+    return entries(partitionsPerTopic).map(([topic, partitions]) => ({
       topic,
-      partitions: partitionsPerTopic[topic].map(({ partition, offset }) => ({
+      partitions: partitions.map(({ partition, offset }) => ({
         partition,
         offset,
       })),

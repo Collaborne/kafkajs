@@ -1,5 +1,5 @@
 const isInvalidOffset = require('./isInvalidOffset')
-const { keys, assign } = Object
+const { entries, assign } = Object
 
 const indexPartitions = (obj, { partition, offset }) => assign(obj, { [partition]: offset })
 const indexTopics = (obj, { topic, partitions }) =>
@@ -9,12 +9,10 @@ module.exports = (consumerOffsets, topicOffsets) => {
   const indexedConsumerOffsets = consumerOffsets.reduce(indexTopics, {})
   const indexedTopicOffsets = topicOffsets.reduce(indexTopics, {})
 
-  return keys(indexedConsumerOffsets).map(topic => {
-    const partitions = indexedConsumerOffsets[topic]
+  return entries(indexedConsumerOffsets).map(([topic, partitions]) => {
     return {
       topic,
-      partitions: keys(partitions).map(partition => {
-        const offset = partitions[partition]
+      partitions: entries(partitions).map(([partition, offset]) => {
         const resolvedOffset = isInvalidOffset(offset)
           ? indexedTopicOffsets[topic][partition]
           : offset
