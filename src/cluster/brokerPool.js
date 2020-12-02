@@ -169,7 +169,8 @@ module.exports = class BrokerPool {
         // each with their own target topics
         // In theory we could also try to just fetch the data for the given topics, and then combine the
         // existing metadata.
-        this.metadata = await broker.metadata(getTargetTopics(this.metadata?.topicMetadata))
+        const topicMetadata = this.metadata ? this.metadata.topicMetadata : undefined
+        this.metadata = await broker.metadata(getTargetTopics(topicMetadata))
         this.metadataExpireAt = Date.now() + this.metadataMaxAge
 
         const replacedBrokers = []
