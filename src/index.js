@@ -3,6 +3,8 @@ const {
   LEVELS: { INFO },
 } = require('./loggers')
 
+const { KafkaJSNonRetriableError } = require('./errors')
+
 const InstrumentationEventEmitter = require('./instrumentation/emitter')
 const LoggerConsole = require('./loggers/console')
 const Cluster = require('./cluster')
@@ -99,7 +101,9 @@ module.exports = class Client {
         brokerPool
       ) {
         // XXX: We could compare against the actual options of the provided pool ...
-        throw new Error('Incompatible options: brokerPool and broker pool creation options')
+        throw new KafkaJSNonRetriableError(
+          'Cannot provide both brokerPool and broker pool creation options'
+        )
       } else if (!brokerPool) {
         brokerPool = this[PRIVATE.CREATE_BROKERPOOL]({
           ...brokerPoolOptions,
