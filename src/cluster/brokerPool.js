@@ -13,7 +13,7 @@ const hasBrokerBeenReplaced = (broker, { host, port, rack }) =>
 module.exports = class BrokerPool {
   /**
    * @param {object} options
-   * @param {ConnectionBuilder} options.connectionBuilder
+   * @param {import("./connectionBuilder").ConnectionBuilder} options.connectionBuilder
    * @param {Logger} options.logger
    * @param {Object} options.retry
    * @param {number} options.authenticationTimeout
@@ -44,6 +44,8 @@ module.exports = class BrokerPool {
       })
 
     this.brokers = {}
+    /** @type {Broker | null} */
+    this.seedBroker = null
     /** @type {import("../../types").BrokerMetadata | null} */
     this.metadata = null
     this.metadataExpireAt = null
