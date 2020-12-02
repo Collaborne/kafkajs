@@ -12,12 +12,13 @@ const REQUEST_QUEUE_EMPTY = 'requestQueueEmpty'
 
 module.exports = class RequestQueue extends EventEmitter {
   /**
-   * @param {number} maxInFlightRequests
-   * @param {number} requestTimeout
-   * @param {string} clientId
-   * @param {string} broker
-   * @param {Logger} logger
-   * @param {InstrumentationEventEmitter} [instrumentationEmitter=null]
+   * @param {Object} options
+   * @param {number} options.maxInFlightRequests
+   * @param {number} options.requestTimeout
+   * @param {string} options.clientId
+   * @param {string} options.broker
+   * @param {import("../../../types").Logger} options.logger
+   * @param {import("../../instrumentation/emitter")} [options.instrumentationEmitter=null]
    */
   constructor({
     instrumentationEmitter = null,
