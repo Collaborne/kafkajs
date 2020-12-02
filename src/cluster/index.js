@@ -386,7 +386,7 @@ module.exports = class Cluster {
 
       topicConfigurations[topic] = { timestamp }
 
-      entries(partitionsPerLeader).map(([nodeId, leaderPartitions]) => {
+      entries(partitionsPerLeader).forEach(([nodeId, leaderPartitions]) => {
         partitionsPerBroker[nodeId] = partitionsPerBroker[nodeId] || {}
         partitionsPerBroker[nodeId][topic] = partitions.filter(p =>
           leaderPartitions.includes(p.partition)
