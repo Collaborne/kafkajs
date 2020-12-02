@@ -1,6 +1,6 @@
 {
   "name": "@collaborne/kafkajs",
-  "version": "1.15.0-collaborne.1",
+  "version": "1.15.0-collaborne.2",
   "description": "A modern Apache Kafka client for node.js",
   "author": "Tulio Ornelas <ornelas.tulio@gmail.com>",
   "main": "index.js",
