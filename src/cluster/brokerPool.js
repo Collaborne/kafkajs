@@ -155,7 +155,7 @@ module.exports = class BrokerPool {
       }
       const targetTopics = topicMetadata.map(({ topic }) => topic)
       return topics.reduce(
-        (result, topic) => (result.includes(topic) ? result : result.concat(topic)),
+        (result, topic) => (result.includes(topic) ? result : [...result, topic]),
         targetTopics
       )
     }
