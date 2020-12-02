@@ -24,7 +24,7 @@ const consumer = kafka.consumer({ groupId: 'my-group', brokerPool })
 const producer = kafka.producer({ brokerPool })
 ```
 
-The consumer and producer can then be used as described in [Consuming Messages](Consuming.md) and [Producing Messages](Producing.md), with the caveat that the `connect` and `disconnect` methods will affect the complete pool, and therefore should typicaly not be used.
+The consumer and producer can then be used as described in [Consuming Messages](Consuming.md) and [Producing Messages](Producing.md), with the caveat that the `connect` and `disconnect` methods will affect the complete pool, and therefore should typically not be used.
 
 ## <a name="options"></a> Options
 
