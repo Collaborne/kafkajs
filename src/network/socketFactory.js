@@ -1,5 +1,8 @@
 const KEEP_ALIVE_DELAY = 60000 // in ms
 
+/**
+ * @type {import("../../types").ISocketFactory}
+ */
 module.exports = () => {
   const net = require('net')
   const tls = require('tls')

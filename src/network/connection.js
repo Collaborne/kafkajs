@@ -17,6 +17,7 @@ module.exports = class Connection {
    * @param {string} options.host
    * @param {number} options.port
    * @param {Object} options.logger
+   * @param {import("../../types").ISocketFactory} options.socketFactory
    * @param {string} options.clientId='kafkajs'
    * @param {number} options.requestTimeout The maximum amount of time the client will wait for the response of a request,
    *                                in milliseconds
