@@ -81,7 +81,7 @@ module.exports = class OffsetManager {
   }
 
   /**
-   * @returns {Broker}
+   * @returns {import("../../../types").Broker}
    */
   async getCoordinator() {
     if (!this.coordinator.isConnected()) {
