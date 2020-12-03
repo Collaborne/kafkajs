@@ -13,7 +13,7 @@ const hasBrokerBeenReplaced = (broker, { host, port, rack }) =>
 module.exports = class BrokerPool {
   /**
    * @param {object} options
-   * @param {ConnectionBuilder} options.connectionBuilder
+   * @param {import("./connectionBuilder").ConnectionBuilder} options.connectionBuilder
    * @param {Logger} options.logger
    * @param {Object} options.retry
    * @param {number} options.authenticationTimeout
@@ -44,11 +44,21 @@ module.exports = class BrokerPool {
       })
 
     this.brokers = {}
+    /** @type {Broker | null} */
+    this.seedBroker = null
     /** @type {import("../../types").BrokerMetadata | null} */
     this.metadata = null
     this.metadataExpireAt = null
     this.versions = null
     this.supportAuthenticationProtocol = null
+
+    /** @type {{[topic: string]: Promise<null>}} */
+    this.pendingMetadataTopicPromises = {}
+    /** @type {{[topic: string]: () => void}} */
+    this.pendingMetadataTopicResolves = {}
+    /** @type {{[topic: string]: (err: Error) => void}} */
+    this.pendingMetadataTopicRejects = {}
+    this.refreshMetadataRunning = false
   }
 
   /**
@@ -149,86 +159,147 @@ module.exports = class BrokerPool {
    * @returns {Promise<null>}
    */
   async refreshMetadata(topics) {
+    const promises = []
+    for (const topic of topics) {
+      let promise = this.pendingMetadataTopicPromises[topic]
+      if (!promise) {
+        promise = this.pendingMetadataTopicPromises[topic] = new Promise((resolve, reject) => {
+          const cleanup = () => {
+            delete this.pendingMetadataTopicPromises[topic]
+            delete this.pendingMetadataTopicResolves[topic]
+            delete this.pendingMetadataTopicRejects[topic]
+          }
+
+          this.pendingMetadataTopicResolves[topic] = () => {
+            cleanup()
+            resolve()
+          }
+          this.pendingMetadataTopicRejects[topic] = err => {
+            cleanup()
+            reject(err)
+          }
+        })
+      }
+      promises.push(promise)
+    }
+
+    if (!this.refreshMetadataRunning) {
+      void this.refreshMetadataInternal()
+    }
+
+    return Promise.all(promises)
+  }
+
+  /** @private */
+  get pendingMetadataTopics() {
+    return keys(this.pendingMetadataTopicPromises)
+  }
+
+  /** @private */
+  async refreshMetadataInternal() {
     const getTargetTopics = topicMetadata => {
+      const topics = this.pendingMetadataTopics
       if (!topicMetadata) {
         return topics
       }
       const targetTopics = topicMetadata.map(({ topic }) => topic)
       return topics.reduce(
-        (result, topic) => (result.includes(topic) ? result : result.concat(topic)),
+        (result, topic) => (result.includes(topic) ? result : [...result, topic]),
         targetTopics
       )
     }
 
-    const broker = await this.findConnectedBroker()
-    const { host: seedHost, port: seedPort } = this.seedBroker.connection
+    this.refreshMetadataRunning = true
+    try {
+      while (this.pendingMetadataTopics.length > 0) {
+        const broker = await this.findConnectedBroker()
+        const { host: seedHost, port: seedPort } = this.seedBroker.connection
 
-    return this.retrier(async (bail, retryCount, retryTime) => {
-      try {
-        // Refresh the metadata for all topics: The pool could be shared between different clusters,
-        // each with their own target topics
-        // In theory we could also try to just fetch the data for the given topics, and then combine the
-        // existing metadata.
-        const topicMetadata = this.metadata ? this.metadata.topicMetadata : undefined
-        this.metadata = await broker.metadata(getTargetTopics(topicMetadata))
-        this.metadataExpireAt = Date.now() + this.metadataMaxAge
+        await this.retrier(async (bail, retryCount, retryTime) => {
+          try {
+            // Refresh the metadata for all topics: The pool could be shared between different clusters,
+            // each with their own target topics
+            // In theory we could also try to just fetch the data for the given topics, and then combine the
+            // existing metadata.
+            const topicMetadata = this.metadata ? this.metadata.topicMetadata : undefined
+            this.metadata = await broker.metadata(getTargetTopics(topicMetadata))
+            this.metadataExpireAt = Date.now() + this.metadataMaxAge
 
-        const replacedBrokers = []
+            const replacedBrokers = []
 
-        this.brokers = await this.metadata.brokers.reduce(
-          async (resultPromise, { nodeId, host, port, rack }) => {
-            const result = await resultPromise
+            this.brokers = await this.metadata.brokers.reduce(
+              async (resultPromise, { nodeId, host, port, rack }) => {
+                const result = await resultPromise
 
-            if (result[nodeId]) {
-              if (!hasBrokerBeenReplaced(result[nodeId], { host, port, rack })) {
-                return result
-              }
+                if (result[nodeId]) {
+                  if (!hasBrokerBeenReplaced(result[nodeId], { host, port, rack })) {
+                    return result
+                  }
 
-              replacedBrokers.push(result[nodeId])
-            }
+                  replacedBrokers.push(result[nodeId])
+                }
 
-            if (host === seedHost && port === seedPort) {
-              this.seedBroker.nodeId = nodeId
-              this.seedBroker.connection.rack = rack
-              return assign(result, {
-                [nodeId]: this.seedBroker,
+                if (host === seedHost && port === seedPort) {
+                  this.seedBroker.nodeId = nodeId
+                  this.seedBroker.connection.rack = rack
+                  return assign(result, {
+                    [nodeId]: this.seedBroker,
+                  })
+                }
+
+                return assign(result, {
+                  [nodeId]: this.createBroker({
+                    logger: this.rootLogger,
+                    versions: this.versions,
+                    supportAuthenticationProtocol: this.supportAuthenticationProtocol,
+                    connection: await this.connectionBuilder.build({ host, port, rack }),
+                    nodeId,
+                  }),
+                })
+              },
+              this.brokers
+            )
+
+            const freshBrokerIds = this.metadata.brokers.map(({ nodeId }) => `${nodeId}`).sort()
+            const currentBrokerIds = keys(this.brokers).sort()
+            const unusedBrokerIds = arrayDiff(currentBrokerIds, freshBrokerIds)
+
+            const brokerDisconnects = unusedBrokerIds.map(nodeId => {
+              const broker = this.brokers[nodeId]
+              return broker.disconnect().then(() => {
+                delete this.brokers[nodeId]
               })
+            })
+
+            const replacedBrokersDisconnects = replacedBrokers.map(broker => broker.disconnect())
+
+            // Resolve all pending topics that are now known
+            this.metadata.topicMetadata
+              .map(({ topic }) => topic)
+              .forEach(topic => {
+                const resolvePendingMetadataTopic = this.pendingMetadataTopicResolves[topic]
+                if (resolvePendingMetadataTopic) {
+                  resolvePendingMetadataTopic()
+                }
+              })
+            await Promise.all([...brokerDisconnects, ...replacedBrokersDisconnects])
+          } catch (e) {
+            if (e.type === 'LEADER_NOT_AVAILABLE') {
+              throw e
             }
 
-            return assign(result, {
-              [nodeId]: this.createBroker({
-                logger: this.rootLogger,
-                versions: this.versions,
-                supportAuthenticationProtocol: this.supportAuthenticationProtocol,
-                connection: await this.connectionBuilder.build({ host, port, rack }),
-                nodeId,
-              }),
-            })
-          },
-          this.brokers
-        )
-
-        const freshBrokerIds = this.metadata.brokers.map(({ nodeId }) => `${nodeId}`).sort()
-        const currentBrokerIds = keys(this.brokers).sort()
-        const unusedBrokerIds = arrayDiff(currentBrokerIds, freshBrokerIds)
-
-        const brokerDisconnects = unusedBrokerIds.map(nodeId => {
-          const broker = this.brokers[nodeId]
-          return broker.disconnect().then(() => {
-            delete this.brokers[nodeId]
-          })
+            bail(e)
+          }
         })
-
-        const replacedBrokersDisconnects = replacedBrokers.map(broker => broker.disconnect())
-        await Promise.all([...brokerDisconnects, ...replacedBrokersDisconnects])
-      } catch (e) {
-        if (e.type === 'LEADER_NOT_AVAILABLE') {
-          throw e
-        }
-
-        bail(e)
       }
-    })
+    } catch (err) {
+      // Reject all pending requests, as these have assumed we would refresh for them
+      values(this.pendingMetadataTopicRejects).forEach(reject => {
+        reject(err)
+      })
+    } finally {
+      this.refreshMetadataRunning = false
+    }
   }
 
   /**

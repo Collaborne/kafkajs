@@ -2,8 +2,15 @@ const Connection = require('../network/connection')
 const { KafkaJSConnectionError, KafkaJSNonRetriableError } = require('../errors')
 
 /**
+ * @typedef {Object} ConnectionBuilder
+ * @property {(host: string, port: number, rack?: string) => Connection} build
+ * @property {(anotherInstrumentationEmitter?: import("../instrumentation/emitter")) => void} forwardInstrumentationEvents
+ */
+
+/**
  * @param {Object} options
  * @param {import("../instrumentation/emitter")} [options.instrumentationEmitter]
+ * @returns {ConnectionBuilder}
  */
 module.exports = ({
   socketFactory,

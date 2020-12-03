@@ -478,12 +478,13 @@ module.exports = class Broker {
 
   /**
    * @public
-   * @param {string} groupId
-   * @param {number} groupGenerationId
-   * @param {string} memberId
-   * @param {number} [retentionTime=-1] -1 signals to the broker that its default configuration
+   * @param {object} request
+   * @param {string} request.groupId
+   * @param {number} request.groupGenerationId
+   * @param {string} request.memberId
+   * @param {number} [request.retentionTime=-1] -1 signals to the broker that its default configuration
    *                                    should be used.
-   * @param {object} topics Topics to commit offsets, e.g:
+   * @param {object} request.topics Topics to commit offsets, e.g:
    *                  [
    *                    {
    *                      topic: 'topic-name',
@@ -509,8 +510,9 @@ module.exports = class Broker {
 
   /**
    * @public
-   * @param {string} groupId
-   * @param {object} topics - If the topic array is null fetch offsets for all topics. e.g:
+   * @param {object} request
+   * @param {string} request.groupId
+   * @param {object} request.topics - If the topic array is null fetch offsets for all topics. e.g:
    *                  [
    *                    {
    *                      topic: 'topic-name',

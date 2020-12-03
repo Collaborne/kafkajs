@@ -546,6 +546,18 @@ export type Broker = {
     retentionTime?: number
     topics: Array<{ topic: string; partitions: Array<{ partition: number; offset: string }> }>
   }): Promise<any>
+  offsetFetch(request: {
+    groupId: string
+    topics: Array<{
+      topic: string
+      partitions: Array<{ partition: number }>
+    }>
+  }): Promise<{
+    responses: Array<{
+      topic: string
+      partitions: Array<{ partition: number, offset: string }>
+    }>
+  }>
   fetch(request: {
     replicaId?: number
     isolationLevel?: number

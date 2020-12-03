@@ -218,6 +218,11 @@ module.exports = class Cluster {
     }
 
     const topicMetadata = metadata.topicMetadata.find(t => t.topic === topic)
+    if (!topicMetadata) {
+      throw new KafkaJSTopicMetadataNotLoaded('Topic metadata does not include required topic', {
+        topic,
+      })
+    }
     return topicMetadata ? topicMetadata.partitionMetadata : []
   }
 
@@ -238,7 +243,11 @@ module.exports = class Cluster {
       const metadata = partitionMetadata.find(p => p.partitionId === partitionId)
 
       if (!metadata) {
-        return result
+        throw new KafkaJSError('Unavailable partition metadata', {
+          topic,
+          partitionId,
+          partitionMetadata,
+        })
       }
 
       if (metadata.leader === null || metadata.leader === undefined) {
@@ -386,7 +395,7 @@ module.exports = class Cluster {
 
       topicConfigurations[topic] = { timestamp }
 
-      entries(partitionsPerLeader).map(([nodeId, leaderPartitions]) => {
+      entries(partitionsPerLeader).forEach(([nodeId, leaderPartitions]) => {
         partitionsPerBroker[nodeId] = partitionsPerBroker[nodeId] || {}
         partitionsPerBroker[nodeId][topic] = partitions.filter(p =>
           leaderPartitions.includes(p.partition)

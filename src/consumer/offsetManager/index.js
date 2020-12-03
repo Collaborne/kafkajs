@@ -81,7 +81,7 @@ module.exports = class OffsetManager {
   }
 
   /**
-   * @returns {Broker}
+   * @returns {import("../../../types").Broker}
    */
   async getCoordinator() {
     if (!this.coordinator.isConnected()) {
@@ -329,8 +329,7 @@ module.exports = class OffsetManager {
       return assign(obj, { [partition]: offset })
     }
 
-    const hasUnresolvedPartitions = () =>
-      unresolvedPartitions.filter(t => t.partitions.length > 0).length > 0
+    const hasUnresolvedPartitions = () => unresolvedPartitions.some(t => t.partitions.length > 0)
 
     let offsets = consumerOffsets
     if (hasUnresolvedPartitions()) {
