@@ -227,7 +227,7 @@ kafka.consumer({
   retry: <Object>,
   maxInFlightRequests: <Number>,
   rackId: <String>,
-  brokerPool: <BrokerPool>
+  connectionPool: <ConnectionPool>
 })
 ```
 
