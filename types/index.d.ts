@@ -888,7 +888,8 @@ export interface ConnectionPoolConfig {
 }
 
 export interface ConnectionPool {
-  // No public API
+  connect(): Promise<null>
+  disconnect(): Promise<null>
 }
 
 export class KafkaJSError extends Error {
