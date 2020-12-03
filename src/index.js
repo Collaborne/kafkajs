@@ -91,22 +91,22 @@ module.exports = class Client {
     }
     this[PRIVATE.CREATE_CLUSTER] = ({
       isolationLevel,
-      brokerPool,
+      connectionPool: brokerPool,
       instrumentationEmitter,
-      ...brokerPoolOptions
+      ...connectionPoolOptions
     }) => {
       if (
-        Object.entries(brokerPoolOptions).filter(([, value]) => typeof value !== 'undefined')
+        Object.entries(connectionPoolOptions).filter(([, value]) => typeof value !== 'undefined')
           .length > 0 &&
         brokerPool
       ) {
         // XXX: We could compare against the actual options of the provided pool ...
         throw new KafkaJSNonRetriableError(
-          'Cannot provide both brokerPool and broker pool creation options'
+          'Cannot provide both connectionPool and connection pool creation options'
         )
       } else if (!brokerPool) {
         brokerPool = this[PRIVATE.CREATE_BROKERPOOL]({
-          ...brokerPoolOptions,
+          ...connectionPoolOptions,
           instrumentationEmitter,
         })
       } else if (instrumentationEmitter) {
@@ -134,7 +134,7 @@ module.exports = class Client {
     transactionalId,
     transactionTimeout,
     maxInFlightRequests,
-    brokerPool,
+    connectionPool,
   } = {}) {
     const instrumentationEmitter = new InstrumentationEventEmitter()
     const cluster = this[PRIVATE.CREATE_CLUSTER]({
@@ -142,7 +142,7 @@ module.exports = class Client {
       allowAutoTopicCreation,
       maxInFlightRequests,
       instrumentationEmitter,
-      brokerPool,
+      connectionPool,
     })
 
     return createProducer({
@@ -176,7 +176,7 @@ module.exports = class Client {
     maxInFlightRequests,
     readUncommitted = false,
     rackId = '',
-    brokerPool,
+    connectionPool,
   } = {}) {
     const isolationLevel = readUncommitted
       ? ISOLATION_LEVEL.READ_UNCOMMITTED
@@ -189,7 +189,7 @@ module.exports = class Client {
       maxInFlightRequests,
       isolationLevel,
       instrumentationEmitter,
-      brokerPool,
+      connectionPool,
     })
 
     return createConsumer({
@@ -237,7 +237,7 @@ module.exports = class Client {
     return this[PRIVATE.LOGGER]
   }
 
-  brokerPool({
+  connectionPool({
     metadataMaxAge = DEFAULT_METADATA_MAX_AGE,
     allowAutoTopicCreation = true,
     maxInFlightRequests = null,

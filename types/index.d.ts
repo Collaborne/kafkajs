@@ -12,7 +12,7 @@ export class Kafka {
   consumer(config?: ConsumerConfig): Consumer
   admin(config?: AdminConfig): Admin
   logger(): Logger
-  brokerPool(config?: BrokerPoolConfig): BrokerPool
+  connectionPool(config?: ConnectionPoolConfig): ConnectionPool
 }
 
 export type BrokersFunction = () => string[] | Promise<string[]>
@@ -66,7 +66,7 @@ export interface BaseProducerConfig {
   transactionTimeout?: number
 }
 
-export type ProducerConfig = BaseProducerConfig & (BrokerPoolConfig | { brokerPool: BrokerPool })
+export type ProducerConfig = BaseProducerConfig & (ConnectionPoolConfig | { connectionPool: ConnectionPool })
 
 export interface Message {
   key?: Buffer | string | null
@@ -119,7 +119,7 @@ export interface BaseConsumerConfig {
   rackId?: string
 }
 
-export type ConsumerConfig = BaseConsumerConfig & (BrokerPoolConfig | { brokerPool?: BrokerPool })
+export type ConsumerConfig = BaseConsumerConfig & (ConnectionPoolConfig | { connectionPool?: ConnectionPool })
 
 export type PartitionAssigner = (config: { cluster: Cluster }) => Assigner
 
@@ -881,13 +881,13 @@ export var CompressionCodecs: {
   [CompressionTypes.ZSTD]: () => any
 }
 
-export interface BrokerPoolConfig {
+export interface ConnectionPoolConfig {
   metadataMaxAge?: number
   allowAutoTopicCreation?: boolean
   maxInFlightRequests?: number
 }
 
-export interface BrokerPool {
+export interface ConnectionPool {
   // No public API
 }
 
