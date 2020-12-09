@@ -1,4 +1,4 @@
-const EventEmitter = require('events')
+const { EventEmitter } = require('events')
 const SocketRequest = require('./socketRequest')
 const events = require('../instrumentationEvents')
 const { KafkaJSInvariantViolation } = require('../../errors')
@@ -15,10 +15,12 @@ module.exports = class RequestQueue extends EventEmitter {
    * @param {Object} options
    * @param {number} options.maxInFlightRequests
    * @param {number} options.requestTimeout
+   * @param {boolean} options.enforceRequestTimeout
    * @param {string} options.clientId
    * @param {string} options.broker
    * @param {import("../../../types").Logger} options.logger
    * @param {import("../../instrumentation/emitter")} [options.instrumentationEmitter=null]
+   * @param {() => boolean} [options.isConnected]
    */
   constructor({
     instrumentationEmitter = null,

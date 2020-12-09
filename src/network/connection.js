@@ -1,4 +1,3 @@
-const createRetry = require('../retry')
 const createSocket = require('./socket')
 const createRequest = require('../protocol/request')
 const Decoder = require('../protocol/decoder')
@@ -18,7 +17,7 @@ module.exports = class Connection {
    * @param {number} options.port
    * @param {import("../../types").Logger} options.logger
    * @param {import("../../types").ISocketFactory} options.socketFactory
-   * @param {string} options.clientId='kafkajs'
+   * @param {string} [options.clientId='kafkajs']
    * @param {number} options.requestTimeout The maximum amount of time the client will wait for the response of a request,
    *                                in milliseconds
    * @param {string} [options.rack=null]
@@ -29,11 +28,10 @@ module.exports = class Connection {
    *                             key "mechanism". Connection is not actively using the SASL attributes
    *                             but acting as a data object for this information
    * @param {number} [options.connectionTimeout=1000] The connection timeout, in milliseconds
-   * @param {Object} [options.retry=null] Configurations for the built-in retry mechanism. More information at the
-   *                              retry module inside network
+   * @param {boolean} [options.enforceRequestTimeout]
    * @param {number} [options.maxInFlightRequests=null] The maximum number of unacknowledged requests on a connection before
    *                                            enqueuing
-   * @param {InstrumentationEventEmitter} [options.instrumentationEmitter=null]
+   * @param {import("../instrumentation/emitter")} [options.instrumentationEmitter=null]
    */
   constructor({
     host,
@@ -49,7 +47,6 @@ module.exports = class Connection {
     enforceRequestTimeout = false,
     maxInFlightRequests = null,
     instrumentationEmitter = null,
-    retry = {},
   }) {
     this.host = host
     this.port = port
@@ -62,8 +59,6 @@ module.exports = class Connection {
     this.ssl = ssl
     this.sasl = sasl
 
-    this.retry = retry
-    this.retrier = createRetry({ ...this.retry })
     this.requestTimeout = requestTimeout
     this.connectionTimeout = connectionTimeout
 

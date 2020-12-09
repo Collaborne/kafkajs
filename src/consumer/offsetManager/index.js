@@ -81,7 +81,7 @@ module.exports = class OffsetManager {
   }
 
   /**
-   * @returns {import("../../../types").Broker}
+   * @returns {Promise<import("../../../types").Broker>}
    */
   async getCoordinator() {
     if (!this.coordinator.isConnected()) {
@@ -92,17 +92,14 @@ module.exports = class OffsetManager {
   }
 
   /**
-   * @param {string} topic
-   * @param {number} partition
+   * @param {import("../../../types").TopicPartition} topicPartition
    */
   resetOffset({ topic, partition }) {
     this.resolvedOffsets[topic][partition] = this.committedOffsets()[topic][partition]
   }
 
   /**
-   * @param {string} topic
-   * @param {number} partition
-   * @param {string} offset
+   * @param {import("../../../types").TopicPartitionOffset} topicPartitionOffset
    */
   resolveOffset({ topic, partition, offset }) {
     this.resolvedOffsets[topic][partition] = Long.fromValue(offset)
@@ -136,8 +133,7 @@ module.exports = class OffsetManager {
   }
 
   /**
-   * @param {string} topic
-   * @param {number} partition
+   * @param {import("../../../types").TopicPartition} topicPartition
    */
   async setDefaultOffset({ topic, partition }) {
     const { groupId, generationId, memberId } = this
@@ -163,9 +159,7 @@ module.exports = class OffsetManager {
    * Commit the given offset to the topic/partition. If the consumer isn't assigned to the given
    * topic/partition this method will be a NO-OP.
    *
-   * @param {string} topic
-   * @param {number} partition
-   * @param {string} offset
+   * @param {import("../../../types").TopicPartitionOffset} topicPartitionOffset
    */
   async seek({ topic, partition, offset }) {
     if (!this.memberAssignment[topic] || !this.memberAssignment[topic].includes(partition)) {
@@ -346,8 +340,7 @@ module.exports = class OffsetManager {
 
   /**
    * @private
-   * @param {string} topic
-   * @param {number} partition
+   * @param {import("../../../types").TopicPartition} topicPartition
    */
   clearOffsets({ topic, partition }) {
     delete this.committedOffsets()[topic][partition]

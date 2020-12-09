@@ -153,7 +153,7 @@ export type Cluster = {
         partitions: Array<{ partition: number }>
       } & XOR<{ fromBeginning: boolean }, { fromTimestamp: number }>
     >
-  ): Promise<{ topic: string; partitions: Array<{ partition: number; offset: string }> }>
+  ): Promise<TopicOffsets[]>
 }
 
 export type Assignment = { [topic: string]: number[] }
@@ -353,10 +353,7 @@ export type RequestQueueSizeEvent = InstrumentationEvent<{
   queueSize: number
 }>
 
-export interface SeekEntry {
-  partition: number
-  offset: string
-}
+export type SeekEntry = PartitionOffset
 
 export interface Acl {
   principal: string
@@ -526,16 +523,23 @@ export interface BrokerMetadata {
   brokers: Array<{ nodeId: number; host: string; port: number; rack?: string }>
   topicMetadata: Array<{
     topicErrorCode: number
-    topic: number
+    topic: string
     partitionMetadata: PartitionMetadata[]
   }>
+}
+
+export interface ApiVersions {
+  [apiKey: number]: {
+    minVersion: number
+    maxVersion: number
+  }
 }
 
 export type Broker = {
   isConnected(): boolean
   connect(): Promise<void>
   disconnect(): Promise<void>
-  apiVersions(): Promise<{ [apiKey: number]: { minVersion: number; maxVersion: number } }>
+  apiVersions(): Promise<ApiVersions>
   metadata(
     topics: string[]
   ): Promise<BrokerMetadata>
@@ -544,19 +548,13 @@ export type Broker = {
     groupGenerationId: number
     memberId: string
     retentionTime?: number
-    topics: Array<{ topic: string; partitions: Array<{ partition: number; offset: string }> }>
+    topics: TopicOffsets[]
   }): Promise<any>
   offsetFetch(request: {
     groupId: string
-    topics: Array<{
-      topic: string
-      partitions: Array<{ partition: number }>
-    }>
+    topics: TopicOffsets[]
   }): Promise<{
-    responses: Array<{
-      topic: string
-      partitions: Array<{ partition: number, offset: string }>
-    }>
+    responses: TopicOffsets[]
   }>
   fetch(request: {
     replicaId?: number
@@ -569,6 +567,18 @@ export type Broker = {
       partitions: Array<{ partition: number; fetchOffset: string; maxBytes: number }>
     }>
     rackId?: string
+  }): Promise<any>
+  produce(request: {
+    topicData: Array<{
+      topic: string
+      partitions: Array<{ partition: number; firstSequence?: number; messages: Message[] }>
+    }>
+    transactionalId?: string
+    producerId?: number
+    producerEpoch?: number
+    acks?: number
+    timeout?: number
+    compression?: CompressionTypes
   }): Promise<any>
 }
 
@@ -691,10 +701,15 @@ export type GroupDescriptions = {
 }
 
 export type TopicPartitions = { topic: string; partitions: number[] }
-export type TopicPartitionOffsetAndMetadata = {
+
+export type TopicPartition = {
   topic: string
   partition: number
+}
+export type TopicPartitionOffset = TopicPartition & {
   offset: string
+}
+export type TopicPartitionOffsetAndMetadata = TopicPartitionOffset & {
   metadata?: string | null
 }
 
@@ -750,13 +765,7 @@ export type ConsumerCommitOffsetsEvent = InstrumentationEvent<{
   groupId: string
   memberId: string
   groupGenerationId: number
-  topics: {
-    topic: string
-    partitions: {
-      offset: string
-      partition: string
-    }[]
-  }[]
+  topics: TopicOffsets[]
 }>
 export interface IMemberAssignment {
   [key: string]: number[]
@@ -853,7 +862,7 @@ export type Consumer = {
   stop(): Promise<void>
   run(config?: ConsumerRunConfig): Promise<void>
   commitOffsets(topicPartitions: Array<TopicPartitionOffsetAndMetadata>): Promise<void>
-  seek(topicPartition: { topic: string; partition: number; offset: string }): void
+  seek(topicPartitionOffset: TopicPartitionOffset): void
   describeGroup(): Promise<GroupDescription>
   pause(topics: Array<{ topic: string; partitions?: number[] }>): void
   paused(): TopicPartitions[]
@@ -888,8 +897,7 @@ export interface ConnectionPoolConfig {
 }
 
 export interface ConnectionPool {
-  connect(): Promise<null>
-  disconnect(): Promise<null>
+  // No exported interface
 }
 
 export class KafkaJSError extends Error {

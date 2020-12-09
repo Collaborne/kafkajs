@@ -14,11 +14,12 @@ module.exports = class BrokerPool {
   /**
    * @param {object} options
    * @param {import("./connectionBuilder").ConnectionBuilder} options.connectionBuilder
-   * @param {Logger} options.logger
-   * @param {Object} options.retry
-   * @param {number} options.authenticationTimeout
-   * @param {number} options.reauthenticationThreshold
-   * @param {number} options.metadataMaxAge
+   * @param {import("../../types").Logger} options.logger
+   * @param {import("../../types").RetryOptions} [options.retry]
+   * @param {boolean} [options.allowAutoTopicCreation]
+   * @param {number} [options.authenticationTimeout]
+   * @param {number} [options.reauthenticationThreshold]
+   * @param {number} [options.metadataMaxAge]
    */
   constructor({
     connectionBuilder,
@@ -44,8 +45,8 @@ module.exports = class BrokerPool {
       })
 
     this.brokers = {}
-    /** @type {Broker | null} */
-    this.seedBroker = null
+    /** @type {Broker | undefined} */
+    this.seedBroker = undefined
     /** @type {import("../../types").BrokerMetadata | null} */
     this.metadata = null
     this.metadataExpireAt = null
@@ -58,7 +59,14 @@ module.exports = class BrokerPool {
     this.pendingMetadataTopicResolves = {}
     /** @type {{[topic: string]: (err: Error) => void}} */
     this.pendingMetadataTopicRejects = {}
-    this.refreshMetadataRunning = false
+    /** @type {Promise<void>} */
+    this.nextSuccessfulRefreshMetadata = undefined
+
+    /**
+     * Handles for clusters that currently are connected
+     * @type {Set<number>}
+     */
+    this.connectedClusters = new Set()
   }
 
   /**
@@ -86,9 +94,14 @@ module.exports = class BrokerPool {
 
   /**
    * @public
+   * @param {number} [clusterHandle]
    * @returns {Promise<null>}
    */
-  async connect() {
+  async connect(clusterHandle) {
+    if (clusterHandle) {
+      this.connectedClusters.add(clusterHandle)
+    }
+
     if (this.hasConnectedBrokers()) {
       return
     }
@@ -121,9 +134,17 @@ module.exports = class BrokerPool {
 
   /**
    * @public
+   * @param {number} [clusterHandle]
    * @returns {Promise}
    */
-  async disconnect() {
+  async disconnect(clusterHandle) {
+    if (clusterHandle) {
+      this.connectedClusters.delete(clusterHandle)
+    }
+    if (this.connectedClusters.size > 0) {
+      // Other clusters are connected, ignore the call
+      return
+    }
     this.seedBroker && (await this.seedBroker.disconnect())
     await Promise.all(values(this.brokers).map(broker => broker.disconnect()))
 
@@ -135,8 +156,9 @@ module.exports = class BrokerPool {
 
   /**
    * @public
-   * @param {String} host
-   * @param {Number} port
+   * @param {Object} destination
+   * @param {string} destination.host
+   * @param {number} destination.port
    */
   removeBroker({ host, port }) {
     const removedBroker = values(this.brokers).find(
@@ -183,11 +205,16 @@ module.exports = class BrokerPool {
       promises.push(promise)
     }
 
-    if (!this.refreshMetadataRunning) {
+    // Ensure the metadata update is running, and link in the promise
+    // for the next iteration (after which minimally the broker metadata will have
+    // been updated)
+    if (!this.nextSuccessfulRefreshMetadata) {
       void this.refreshMetadataInternal()
     }
+    promises.push(this.nextSuccessfulRefreshMetadata)
 
-    return Promise.all(promises)
+    // Ignore any result and do not leak it to the caller
+    return Promise.all(promises).then(result => null)
   }
 
   /** @private */
@@ -209,9 +236,18 @@ module.exports = class BrokerPool {
       )
     }
 
-    this.refreshMetadataRunning = true
+    let resolveNext
+    let rejectNext
+    this.nextSuccessfulRefreshMetadata = new Promise((resolve, reject) => {
+      resolveNext = resolve
+      rejectNext = reject
+    })
     try {
-      while (this.pendingMetadataTopics.length > 0) {
+      // Run at least one refresh regardless of whether there are target topics or not, so we update
+      // general metadata such as brokers.
+      // Then repeat doing the refresh while there are still pending topics for which we do not have any
+      // known metadata.
+      do {
         const broker = await this.findConnectedBroker()
         const { host: seedHost, port: seedPort } = this.seedBroker.connection
 
@@ -291,14 +327,24 @@ module.exports = class BrokerPool {
             bail(e)
           }
         })
-      }
+
+        // Mark this iteration as resolved, and start a new one
+        resolveNext()
+        this.nextSuccessfulRefreshMetadata = new Promise((resolve, reject) => {
+          resolveNext = resolve
+          rejectNext = reject
+        })
+      } while (this.pendingMetadataTopics.length > 0)
+      resolveNext()
     } catch (err) {
       // Reject all pending requests, as these have assumed we would refresh for them
       values(this.pendingMetadataTopicRejects).forEach(reject => {
         reject(err)
       })
+      rejectNext(err)
     } finally {
-      this.refreshMetadataRunning = false
+      // Resolve the last started iteration, and remove the indication that we're running
+      this.nextSuccessfulRefreshMetadata = undefined
     }
   }
 
@@ -325,7 +371,8 @@ module.exports = class BrokerPool {
 
   /**
    * @public
-   * @param {string} nodeId
+   * @param {object} options
+   * @param {string} options.nodeId
    * @returns {Promise<Broker>}
    */
   async findBroker({ nodeId }) {
@@ -341,8 +388,9 @@ module.exports = class BrokerPool {
 
   /**
    * @public
-   * @param {Promise<{ nodeId<String>, broker<Broker> }>} callback
-   * @returns {Promise<null>}
+   * @param {(params: { nodeId: string, broker: Broker }) => Promise<T>} callback
+   * @returns {Promise<T>}
+   * @template T
    */
   async withBroker(callback) {
     const brokers = shuffle(keys(this.brokers))

@@ -1,4 +1,4 @@
-const EventEmitter = require('events')
+const { EventEmitter } = require('events')
 const InstrumentationEvent = require('./event')
 const { KafkaJSError } = require('../errors')
 
@@ -34,8 +34,8 @@ module.exports = class InstrumentationEventEmitter {
 
   /**
    * @param {string} eventName
-   * @param {Function} listener
-   * @returns {Function} removeListener
+   * @param {(...args: any[]) => void} listener
+   * @returns {import("../../types").RemoveInstrumentationEventListener<string>} removeListener
    */
   addListener(eventName, listener) {
     this.emitter.addListener(eventName, listener)
@@ -44,6 +44,9 @@ module.exports = class InstrumentationEventEmitter {
 
   forward(anotherInstrumentationEmitter) {
     this.forwarders.push(anotherInstrumentationEmitter)
-    return () => this.forwarders.remove(anotherInstrumentationEmitter)
+    return () => {
+      const index = this.forwarders.indexOf(anotherInstrumentationEmitter)
+      this.forwarders.splice(index, 1)
+    }
   }
 }

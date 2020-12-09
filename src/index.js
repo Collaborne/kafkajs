@@ -17,6 +17,8 @@ const ISOLATION_LEVEL = require('./protocol/isolationLevel')
 const defaultSocketFactory = require('./network/socketFactory')
 
 const PRIVATE = {
+  ACQUIRE_BROKERPOOL: Symbol('private:Kafka:acquireBrokerPool'),
+  CREATE_BROKERPOOL: Symbol('private:Kafka:createBrokerPool'),
   CREATE_CLUSTER: Symbol('private:Kafka:createCluster'),
   CLUSTER_RETRY: Symbol('private:Kafka:clusterRetry'),
   LOGGER: Symbol('private:Kafka:logger'),
@@ -36,10 +38,9 @@ module.exports = class Client {
    * @param {number} options.authenticationTimeout - in milliseconds
    * @param {number} options.reauthenticationThreshold - in milliseconds
    * @param {number} [options.requestTimeout=30000] - in milliseconds
-   * @param {number} options.metadataMaxAge - in milliseconds
-   * @param {boolean} options.allowAutoTopicCreation
-   * @param {number} options.maxInFlightRequests
-   * @param {import("./instrumentation/emitter")} [options.instrumentationEmitter=null]
+   * @param {boolean} [options.enforceRequestTimeout]
+   * @param {import("../types").RetryOptions} [options.retry]
+   * @param {import("../types").ISocketFactory} [options.socketFactory]
    */
   constructor({
     brokers,
@@ -49,7 +50,7 @@ module.exports = class Client {
     connectionTimeout,
     authenticationTimeout,
     reauthenticationThreshold,
-    requestTimeout,
+    requestTimeout = 30000,
     enforceRequestTimeout = false,
     retry,
     socketFactory = defaultSocketFactory(),
@@ -89,34 +90,53 @@ module.exports = class Client {
         metadataMaxAge,
       })
     }
-    this[PRIVATE.CREATE_CLUSTER] = ({
-      isolationLevel,
-      connectionPool: brokerPool,
+    this[PRIVATE.ACQUIRE_BROKERPOOL] = ({
+      connectionPool,
       instrumentationEmitter,
       ...connectionPoolOptions
     }) => {
       if (
-        Object.entries(connectionPoolOptions).filter(([, value]) => typeof value !== 'undefined')
-          .length > 0 &&
-        brokerPool
+        connectionPool &&
+        Object.values(connectionPoolOptions).some(value => typeof value !== 'undefined')
       ) {
         // XXX: We could compare against the actual options of the provided pool ...
         throw new KafkaJSNonRetriableError(
           'Cannot provide both connectionPool and connection pool creation options'
         )
-      } else if (!brokerPool) {
+      }
+
+      /** @type {BrokerPool} */
+      let brokerPool
+      if (connectionPool) {
+        brokerPool = connectionPool
+        if (instrumentationEmitter) {
+          brokerPool.forwardInstrumentationEvents(instrumentationEmitter)
+        }
+      } else {
         brokerPool = this[PRIVATE.CREATE_BROKERPOOL]({
           ...connectionPoolOptions,
           instrumentationEmitter,
         })
-      } else if (instrumentationEmitter) {
-        brokerPool.forwardInstrumentationEvents(instrumentationEmitter)
       }
+      return brokerPool
+    }
+    this[PRIVATE.CREATE_CLUSTER] = ({
+      isolationLevel,
+      connectionPool,
+      instrumentationEmitter,
+      ...connectionPoolOptions
+    }) => {
+      const brokerPool = this[PRIVATE.ACQUIRE_BROKERPOOL]({
+        connectionPool,
+        instrumentationEmitter,
+        ...connectionPoolOptions,
+      })
       return new Cluster({
         logger: this[PRIVATE.LOGGER],
         retry: this[PRIVATE.CLUSTER_RETRY],
         offsets: this[PRIVATE.OFFSETS],
         isolationLevel,
+        targetTopicsLockTimeout: requestTimeout,
         brokerPool,
       })
     }

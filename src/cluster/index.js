@@ -11,25 +11,31 @@ const {
 } = require('../errors')
 const COORDINATOR_TYPES = require('../protocol/coordinatorTypes')
 
-const { entries } = Object
+const { keys } = Object
 
 const mergeTopics = (obj, { topic, partitions }) => ({
   ...obj,
   [topic]: [...(obj[topic] || []), ...partitions],
 })
 
+/**
+ * Handle to use for the next cluster created
+ */
+let nextClusterHandle = 0
+
 module.exports = class Cluster {
   /**
    * @param {Object} options
    * @param {number} options.isolationLevel
-   * @param {Object} options.retry
+   * @param {number} [options.targetTopicsLockTimeout=30000] - in milliseconds
+   * @param {import("../../types").RetryOptions} options.retry
    * @param {import("../../types").Logger} options.logger
-   * @param {Map} options.offsets
+   * @param {Map} [options.offsets]
    * @param {import("./brokerPool")} options.brokerPool
    */
   constructor({
     logger: rootLogger,
-    requestTimeout = 30000,
+    targetTopicsLockTimeout = 30000,
     retry,
     isolationLevel,
     offsets = new Map(),
@@ -42,37 +48,40 @@ module.exports = class Cluster {
     this.targetTopics = new Set()
     this.mutatingTargetTopics = new Lock({
       description: `updating target topics`,
-      timeout: requestTimeout,
+      timeout: targetTopicsLockTimeout,
     })
     this.isolationLevel = isolationLevel
     this.brokerPool = brokerPool
+    this.clusterHandle = nextClusterHandle++
     this.committedOffsetsByGroup = offsets
   }
 
   isConnected() {
+    // XXX: Would this also mean "... and consider me one of the stakeholders?"
     return this.brokerPool.hasConnectedBrokers()
   }
 
   /**
    * @public
-   * @returns {Promise<null>}
+   * @returns {Promise<void>}
    */
   async connect() {
-    await this.brokerPool.connect()
+    await this.brokerPool.connect(this.clusterHandle)
   }
 
   /**
    * @public
-   * @returns {Promise<null>}
+   * @returns {Promise<void>}
    */
   async disconnect() {
-    await this.brokerPool.disconnect()
+    await this.brokerPool.disconnect(this.clusterHandle)
   }
 
   /**
    * @public
-   * @param {String} host
-   * @param {Number} port
+   * @param {object} destination
+   * @param {String} destination.host
+   * @param {Number} destination.port
    */
   removeBroker({ host, port }) {
     this.brokerPool.removeBroker({ host, port })
@@ -80,7 +89,7 @@ module.exports = class Cluster {
 
   /**
    * @public
-   * @returns {Promise<null>}
+   * @returns {Promise<void>}
    */
   async refreshMetadata() {
     await this.brokerPool.refreshMetadata(Array.from(this.targetTopics))
@@ -88,7 +97,7 @@ module.exports = class Cluster {
 
   /**
    * @public
-   * @returns {Promise<null>}
+   * @returns {Promise<void>}
    */
   async refreshMetadataIfNecessary() {
     await this.brokerPool.refreshMetadataIfNecessary(Array.from(this.targetTopics))
@@ -96,7 +105,7 @@ module.exports = class Cluster {
 
   /**
    * @public
-   * @returns {Promise<Metadata>}
+   * @returns {Promise<import("../../types").BrokerMetadata>}
    */
   async metadata({ topics = [] } = {}) {
     return this.retrier(async (bail, retryCount, retryTime) => {
@@ -157,8 +166,9 @@ module.exports = class Cluster {
 
   /**
    * @public
-   * @param {string} nodeId
-   * @returns {Promise<Broker>}
+   * @param {object} options
+   * @param {string} options.nodeId
+   * @returns {Promise<import("../../types").Broker>}
    */
   async findBroker({ nodeId }) {
     try {
@@ -179,7 +189,7 @@ module.exports = class Cluster {
 
   /**
    * @public
-   * @returns {Promise<Broker>}
+   * @returns {Promise<import("../../types").Broker>}
    */
   async findControllerBroker() {
     const { metadata } = this.brokerPool
@@ -218,18 +228,13 @@ module.exports = class Cluster {
     }
 
     const topicMetadata = metadata.topicMetadata.find(t => t.topic === topic)
-    if (!topicMetadata) {
-      throw new KafkaJSTopicMetadataNotLoaded('Topic metadata does not include required topic', {
-        topic,
-      })
-    }
     return topicMetadata ? topicMetadata.partitionMetadata : []
   }
 
   /**
    * @public
    * @param {string} topic
-   * @param {Array<number>} partitions
+   * @param {(number|string)[]} partitions
    * @returns {Object} Object with leader and partitions. For partitions 0 and 5
    *                   the result could be:
    *                     { '0': [0], '2': [5] }
@@ -243,11 +248,7 @@ module.exports = class Cluster {
       const metadata = partitionMetadata.find(p => p.partitionId === partitionId)
 
       if (!metadata) {
-        throw new KafkaJSError('Unavailable partition metadata', {
-          topic,
-          partitionId,
-          partitionMetadata,
-        })
+        return result
       }
 
       if (metadata.leader === null || metadata.leader === undefined) {
@@ -262,9 +263,10 @@ module.exports = class Cluster {
 
   /**
    * @public
-   * @param {string} groupId
-   * @param {number} [coordinatorType=0]
-   * @returns {Promise<Broker>}
+   * @param {object} params
+   * @param {string} params.groupId
+   * @param {import("../protocol/coordinatorTypes").CoordinatorType} [params.coordinatorType=0]
+   * @returns {Promise<import("../../types").Broker>}
    */
   async findGroupCoordinator({ groupId, coordinatorType = COORDINATOR_TYPES.GROUP }) {
     return this.retrier(async (bail, retryCount, retryTime) => {
@@ -302,8 +304,9 @@ module.exports = class Cluster {
 
   /**
    * @public
-   * @param {string} groupId
-   * @param {number} [coordinatorType=0]
+   * @param {object} params
+   * @param {string} params.groupId
+   * @param {import("../protocol/coordinatorTypes").CoordinatorType} [params.coordinatorType=0]
    * @returns {Promise<Object>}
    */
   async findGroupCoordinatorMetadata({ groupId, coordinatorType }) {
@@ -362,7 +365,7 @@ module.exports = class Cluster {
    *                              fromBeginning: false
    *                            }
    *                          ]
-   * @returns {Promise<Array>} example:
+   * @returns {Promise<import("../../types").TopicOffsets[]>} example:
    *                          [
    *                            {
    *                              topic: 'my-topic-name',
@@ -395,23 +398,24 @@ module.exports = class Cluster {
 
       topicConfigurations[topic] = { timestamp }
 
-      entries(partitionsPerLeader).forEach(([nodeId, leaderPartitions]) => {
+      keys(partitionsPerLeader).forEach(nodeId => {
         partitionsPerBroker[nodeId] = partitionsPerBroker[nodeId] || {}
         partitionsPerBroker[nodeId][topic] = partitions.filter(p =>
-          leaderPartitions.includes(p.partition)
+          partitionsPerLeader[nodeId].includes(p.partition)
         )
       })
     }
 
     // Create a list of requests to fetch the offset of all partitions
-    const requests = entries(partitionsPerBroker).map(async ([nodeId, partitions]) => {
+    const requests = keys(partitionsPerBroker).map(async nodeId => {
       const broker = await this.findBroker({ nodeId })
+      const partitions = partitionsPerBroker[nodeId]
 
       const { responses: topicOffsets } = await broker.listOffsets({
         isolationLevel: this.isolationLevel,
-        topics: entries(partitions).map(([topic, topicPartitions]) => ({
+        topics: keys(partitions).map(topic => ({
           topic,
-          partitions: topicPartitions.map(addDefaultOffset(topic)),
+          partitions: partitions[topic].map(addDefaultOffset(topic)),
         })),
       })
 
@@ -422,9 +426,9 @@ module.exports = class Cluster {
     const responses = await Promise.all(requests)
     const partitionsPerTopic = flatten(responses).reduce(mergeTopics, {})
 
-    return entries(partitionsPerTopic).map(([topic, partitions]) => ({
+    return keys(partitionsPerTopic).map(topic => ({
       topic,
-      partitions: partitions.map(({ partition, offset }) => ({
+      partitions: partitionsPerTopic[topic].map(({ partition, offset }) => ({
         partition,
         offset,
       })),
@@ -433,7 +437,8 @@ module.exports = class Cluster {
 
   /**
    * Retrieve the object mapping for committed offsets for a single consumer group
-   * @param {string} groupId
+   * @param {object} options
+   * @param {string} options.groupId
    * @returns {Object}
    */
   committedOffsets({ groupId }) {
@@ -446,11 +451,11 @@ module.exports = class Cluster {
 
   /**
    * Mark offset as committed for a single consumer group's topic-partition
-   * @param {string} groupId
-   * @param {string} topic
-   * @param {string|number} partition
-   * @param {string} offset
-   * @returns {undefined}
+   * @param {object} options
+   * @param {string} options.groupId
+   * @param {string} options.topic
+   * @param {string|number} options.partition
+   * @param {string} options.offset
    */
   markOffsetAsCommitted({ groupId, topic, partition, offset }) {
     const committedOffsets = this.committedOffsets({ groupId })

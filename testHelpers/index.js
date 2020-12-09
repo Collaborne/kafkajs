@@ -167,7 +167,6 @@ const createConnectionBuilder = (opts = {}, brokers = plainTextBrokers()) => {
     logger: newLogger(),
     brokers,
     connectionTimeout: 1000,
-    retry: null,
     ...connectionOpts(),
     ...opts,
   })

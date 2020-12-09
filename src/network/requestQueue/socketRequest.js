@@ -43,9 +43,11 @@ module.exports = class SocketRequest {
    * @param {Object} options
    * @param {number} options.requestTimeout
    * @param {string} options.broker - e.g: 127.0.0.1:9092
+   * @param {string} options.clientId
    * @param {RequestEntry} options.entry
    * @param {boolean} options.expectResponse
    * @param {Function} options.send
+   * @param {number} options.timeout
    * @param {import("../../instrumentation/emitter")} [options.instrumentationEmitter=null]
    */
   constructor({
