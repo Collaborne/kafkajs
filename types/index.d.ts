@@ -462,7 +462,7 @@ export type Admin = {
     eventName: ValueOf<AdminEvents>,
     listener: (...args: any[]) => void
   ): RemoveInstrumentationEventListener<typeof eventName>
-  events: AdminEvents
+  readonly events: AdminEvents
 }
 
 export const PartitionAssigners: { roundRobin: PartitionAssigner }
@@ -654,7 +654,7 @@ export type Producer = Sender & {
   connect(): Promise<void>
   disconnect(): Promise<void>
   isIdempotent(): boolean
-  events: ProducerEvents
+  readonly events: ProducerEvents
   on(
     eventName: ValueOf<ProducerEvents>,
     listener: (...args: any[]) => void
@@ -872,7 +872,7 @@ export type Consumer = {
     listener: (...args: any[]) => void
   ): RemoveInstrumentationEventListener<typeof eventName>
   logger(): Logger
-  events: ConsumerEvents
+  readonly events: ConsumerEvents
 }
 
 export enum CompressionTypes {
@@ -890,6 +890,14 @@ export var CompressionCodecs: {
   [CompressionTypes.ZSTD]: () => any
 }
 
+export type ConnectionPoolEvents = {
+  CONNECT: 'connectionPool.connect'
+  DISCONNECT: 'connectionPool.disconnect'
+  REQUEST: 'connectionPool.network.request'
+  REQUEST_TIMEOUT: 'connectionPool.network.request_timeout'
+  REQUEST_QUEUE_SIZE: 'connectionPool.network.request_queue_size'
+}
+
 export interface ConnectionPoolConfig {
   metadataMaxAge?: number
   allowAutoTopicCreation?: boolean
@@ -897,7 +905,11 @@ export interface ConnectionPoolConfig {
 }
 
 export interface ConnectionPool {
-  // No exported interface
+  on(
+    eventName: ValueOf<ConnectionPoolEvents>,
+    listener: (...args: any[]) => void
+  ): RemoveInstrumentationEventListener<typeof eventName>
+  readonly events: ConnectionPoolEvents
 }
 
 export class KafkaJSError extends Error {
